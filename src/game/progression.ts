@@ -3,6 +3,7 @@
  * builds level-up / chest choices. Every choice is an `Offer`; the UI just
  * shows them and calls `apply`.
  */
+import { VOCAB } from '../data/theme';
 import { GAME, GRADES } from '../data/tuning';
 import { pickWeighted, shuffle } from '../engine/math';
 import {
@@ -74,7 +75,7 @@ export class Progression {
   private spellOffer(def: SpellDef): Offer {
     const owned = this.spells.get(def.id);
     if (!owned) {
-      return { title: def.name, tag: 'New magic', lines: [def.desc], color: def.color,
+      return { title: def.name, tag: VOCAB.newSpell, lines: [def.desc], color: def.color,
                apply: () => void this.learnSpell(def.id) };
     }
     const next = owned.level + 1;
@@ -82,7 +83,7 @@ export class Progression {
     const group = traitIndex >= 0 ? def.traitGroups[traitIndex] : [];
     if (group.length > 0) {
       return {
-        title: def.name, tag: `Lv ${owned.level} → ${next}`, lines: ['Choose a trait'], color: def.color,
+        title: def.name, tag: `Lv ${owned.level} → ${next}`, lines: [VOCAB.chooseTrait], color: def.color,
         apply: () => group.map((t) => this.traitOffer(owned, t)),
       };
     }
@@ -94,7 +95,7 @@ export class Progression {
 
   private traitOffer(spell: Spell, trait: TraitDef): Offer {
     const lines = [...(trait.text ? [trait.text] : []), ...describeEffects(trait.effects)];
-    return { title: trait.name, tag: `${spell.def.name} trait`, lines, color: spell.def.color,
+    return { title: trait.name, tag: `${spell.def.name} ${VOCAB.trait}`, lines, color: spell.def.color,
              apply: () => this.levelUpSpell(spell, trait) };
   }
 
@@ -113,7 +114,7 @@ export class Progression {
   private passiveOffer(def: PassiveDef): Offer {
     const lv = this.passives.get(def.id) ?? 0;
     return {
-      title: def.name, tag: lv ? `Passive Lv ${lv} → ${lv + 1}` : 'New passive',
+      title: def.name, tag: lv ? `${VOCAB.passive} Lv ${lv} → ${lv + 1}` : VOCAB.newPassive,
       lines: describeEffects(def.effects), color: '#64ff32',
       apply: () => {
         this.passives.set(def.id, lv + 1);
@@ -125,7 +126,7 @@ export class Progression {
   private artifactOffer(def: ArtifactDef): Offer {
     const grade = GRADES[def.grade];
     return {
-      title: def.name, tag: `${grade.name} artifact`, lines: describeEffects(def.effects), color: grade.color,
+      title: def.name, tag: `${grade.name} ${VOCAB.artifact}`, lines: describeEffects(def.effects), color: grade.color,
       apply: () => {
         this.artifacts.push(def);
         this.applyEffects(def.effects);
@@ -134,7 +135,7 @@ export class Progression {
   }
 
   private healOffer(): Offer {
-    return { title: 'Recovery', tag: 'Nothing left to learn', lines: ['Restore 30% HP'], color: '#7dff9a',
+    return { title: 'Repair', tag: 'Nothing left to install', lines: ['Restore 30% HP'], color: '#7dff9a',
              apply: () => this.g.player.heal(this.g.player.maxHp * 0.3) };
   }
 

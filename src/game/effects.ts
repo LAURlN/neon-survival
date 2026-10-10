@@ -6,6 +6,8 @@
  * if every effect id it uses appears here - see `isSupported` in content.ts -
  * so adding an entry to this table is all it takes to unlock more content.
  */
+import { SPELL_THEME } from '../data/theme';
+
 export type EffectKind = 'flat' | 'pct' | 'mul' | 'pmul' | 'flag';
 
 export interface EffectDef {
@@ -35,32 +37,32 @@ def(4, 'atk', 'pct', 'ATK');
 def(129, 'atk', 'pmul', 'ATK');
 def(16, 'atkAmp', 'pct', 'ATK amplification');
 def(76, 'atkAmp', 'pmul', 'ATK amplification');
-def(6, 'cd', 'pct', 'All magic cooldown', -1);
-def(8, 'size', 'pct', 'All magic size');
-def(9, 'size', 'pct', 'All magic size', -1);
-def(77, 'size', 'pmul', 'All magic size');
-def(10, 'dur', 'pct', 'All magic duration');
+def(6, 'cd', 'pct', 'All program cooldown', -1);
+def(8, 'size', 'pct', 'All program size');
+def(9, 'size', 'pct', 'All program size', -1);
+def(77, 'size', 'pmul', 'All program size');
+def(10, 'dur', 'pct', 'All program duration');
 def(14, 'crit', 'flat', 'Critical rate', 1, '%');
 def(15, 'critMult', 'flat', 'Critical multiplier', 1, '%');
-def(17, 'allDmg', 'pct', 'All magic damage');
+def(17, 'allDmg', 'pct', 'All program damage');
 def(20, 'maxHp', 'pct', 'Max HP');
 def(21, 'maxHp', 'pct', 'Max HP', -1);
 def(23, 'dmgTaken', 'pct', 'Damage taken', -1);
 def(24, 'regen', 'flat', 'HP regen per sec', 0.01, '%');
 def(25, 'evasion', 'flat', 'Evasion', 1, '%');
 def(30, 'move', 'pct', 'Movement speed');
-def(36, 'orbHeal', 'pct', 'Life orb recovery');
-def(38, 'mana', 'pct', 'Mana acquisition');
+def(36, 'orbHeal', 'pct', 'Repair kit recovery');
+def(38, 'mana', 'pct', 'Data acquisition');
 def(40, 'pickup', 'pct', 'Item pickup range');
-def(54, 'enemyHp', 'pct', 'Enemy max HP');
-def(55, 'enemySpeed', 'pct', 'Enemy movement speed');
+def(54, 'enemyHp', 'pct', 'Hostile max HP');
+def(55, 'enemySpeed', 'pct', 'Hostile movement speed');
 def(75, 'freezeDur', 'pct', 'Freeze duration');
 // Special artifact behaviours, implemented in game.ts / player.ts.
 def(49, 'revive', 'flat', 'Revives', 1);
 def(53, 'hitCap', 'flat', 'Max damage per hit (of max HP)', 1, '%');
-def(67, 'manaRegen', 'flat', 'Mana gained per sec', 0.01, '%');
-def(82, 'execute', 'flat', 'Instakill enemies below HP', 1, '%');
-def(93, 'guillotine', 'flat', 'Bonus damage to enemies above 75% HP', 1, '%');
+def(67, 'manaRegen', 'flat', 'Data gained per sec', 0.01, '%');
+def(82, 'execute', 'flat', 'Delete hostiles below HP', 1, '%');
+def(93, 'guillotine', 'flat', 'Bonus damage to hostiles above 75% HP', 1, '%');
 def(105, 'bonusLevel', 'flat', 'Current level', 1);
 def(118, 'killExplode', 'flat', 'Explosion chance on kill', 1, '%');
 
@@ -91,7 +93,8 @@ const UNIT: Record<string, string> = { crit: '%', effect: '%', cdSec: 's' };
 
 export const SPELL_NAMES: Record<string, string> = {};
 
-function spell(key: string, name: string, rows: Row[]) {
+function spell(key: string, fallbackName: string, rows: Row[]) {
+  const name = SPELL_THEME[key]?.name ?? fallbackName;
   SPELL_NAMES[key] = name;
   for (const [id, stat, kind, scale = 1] of rows) {
     if (kind === 'flag') flag(id, `${key}.${stat}`);

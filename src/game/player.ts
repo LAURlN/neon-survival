@@ -71,7 +71,9 @@ export class Player {
     if (this.shields > 0) {
       this.shields--;
       this.invuln = GAME.hitInvuln;
-      g.ring(this.x, this.y, 34, '#ffe9a8', 0.3);
+      g.ring(this.x, this.y, 34, '#ffe066', 0.3);
+      g.sparks(this.x, this.y, '#ffe066', 10, 220);
+      g.sound('shield');
       this.onShieldBreak?.();
       return;
     }
@@ -82,6 +84,8 @@ export class Player {
     this.hp -= dmg;
     this.invuln = GAME.hitInvuln;
     this.hurt = 0.25;
+    g.sound('hurt');
+    g.sparks(this.x, this.y, '#ff2e4d', 8, 200);
     g.shake = Math.max(g.shake, 5);
 
     if (this.hp <= 0) {

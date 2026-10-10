@@ -1,4 +1,6 @@
 /** DOM user interface: HUD and the overlay screens (title, choices, pause, result). */
+import { VOCAB } from '../data/theme';
+import type { Sfx } from '../engine/audio';
 import type { Game } from '../game/game';
 import type { Offer } from '../game/progression';
 import { SPELL_NAMES } from '../game/effects';
@@ -63,9 +65,21 @@ export class UI {
   private lastSecond = -1;
 
   onPause: () => void = () => {};
+  /** Toggles mute and returns the new state. */
+  onMute: () => boolean = () => false;
+  /** UI sound hook. */
+  sfx: (name: Sfx) => void = () => {};
+
+  private readonly muteBtn = $('mute');
 
   constructor() {
     $('pause').addEventListener('click', () => this.onPause());
+    this.muteBtn.addEventListener('click', () => this.setMuted(this.onMute()));
+  }
+
+  setMuted(muted: boolean) {
+    this.muteBtn.classList.toggle('off', muted);
+    this.muteBtn.setAttribute('aria-pressed', String(muted));
   }
 
   get overlayOpen() {
@@ -130,18 +144,23 @@ export class UI {
 
   private button(text: string, onClick: () => void, primary = false) {
     const b = el('button', primary ? 'btn primary' : 'btn', text);
-    b.addEventListener('click', onClick);
+    b.addEventListener('click', () => {
+      this.sfx('ui');
+      onClick();
+    });
     return b;
   }
 
   showTitle(onStart: () => void) {
     const best = loadBest();
+    const title = el('h1', 'glitch', VOCAB.title);
+    title.dataset.text = VOCAB.title;
     this.open(
-      el('h1', '', 'MAGIC SURVIVAL'),
-      el('p', 'sub', 'Web remake · unofficial fan project'),
-      el('p', 'sub', 'Drag anywhere to move (or WASD). Magic casts itself. Collect mana to level up and choose new magic.'),
+      title,
+      el('p', 'sub', VOCAB.tagline),
+      el('p', 'sub', 'Drag anywhere to move (or WASD). Programs fire on their own. Collect data shards to level up and install new programs.'),
       best ? el('p', 'sub', `Best: ${formatTime(best.time)} · ${best.kills} kills · Lv ${best.level}`) : null,
-      this.button('Start', onStart, true),
+      this.button('JACK IN', onStart, true),
     );
   }
 
@@ -158,11 +177,14 @@ export class UI {
           card.disabled = true;
           const ul = el('ul');
           for (const line of offer.lines) ul.append(el('li', '', line));
-          card.append(el('div', 'icon', initials(offer.title)), el('div', 'title', offer.title),
+          const icon = el('div', 'icon');
+          icon.append(el('span', '', initials(offer.title)));
+          card.append(icon, el('div', 'title', offer.title),
                       el('div', 'tag', offer.tag), ul);
           card.addEventListener('click', () => {
+            this.sfx('select');
             const next = offer.apply();
-            if (next && next.length > 0) render('Choose a trait', next);
+            if (next && next.length > 0) render(VOCAB.chooseTrait.toUpperCase(), next);
             else {
               this.close();
               resolve();
@@ -189,7 +211,7 @@ export class UI {
       row.style.color = s.color;
       list.append(row);
     }
-    if (pr.artifacts.length) list.append(el('div', '', `Artifacts: ${pr.artifacts.map((a) => a.name).join(', ')}`));
+    if (pr.artifacts.length) list.append(el('div', '', `Cyberware: ${pr.artifacts.map((a) => a.name).join(', ')}`));
     return list;
   }
 
@@ -198,7 +220,7 @@ export class UI {
       el('h2', '', 'PAUSED'),
       this.loadoutList(g),
       this.button('Resume', onResume, true),
-      this.button('Give up', onQuit),
+      this.button('Disconnect', onQuit),
     );
   }
 
@@ -224,16 +246,16 @@ export class UI {
       const bar = el('div', 'bar');
       bar.style.setProperty('--c', SPELL_COLOR[key] ?? '#ffb347');
       bar.style.width = `${Math.max(2, (dmg / top) * 100)}%`;
-      row.append(el('span', '', SPELL_NAMES[key] ?? 'Artifacts'), bar, el('span', '', Math.round(dmg).toLocaleString()));
+      row.append(el('span', '', SPELL_NAMES[key] ?? 'Cyberware'), bar, el('span', '', Math.round(dmg).toLocaleString()));
       list.append(row);
     }
 
     this.open(
-      el('h2', '', 'EXPERIMENT OVER'),
+      el('h2', 'danger', VOCAB.over),
       isBest ? el('div', 'new-best', 'New best time!') : null,
       stats,
       entries.length ? list : null,
-      this.button('Play again', onRestart, true),
+      this.button('JACK IN AGAIN', onRestart, true),
     );
   }
 }

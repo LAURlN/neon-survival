@@ -1,14 +1,16 @@
-# Magic Survival Web
+# Neon Survival
 
-An unofficial, from-scratch browser remake of the mobile game *Magic Survival*, playable on a phone.
+An unofficial, from-scratch browser remake of the mobile game *Magic Survival* with a cyberpunk skin,
+playable on a phone.
 
 **Play:** https://laurln.github.io/magic-survival-web/
 
-Drag anywhere to move (or WASD / arrow keys). Magic casts itself. Collect mana orbs to level up and pick
-new magic; open treasure chests for artifacts. `Esc` / `P` pauses.
+Drag anywhere to move (or WASD / arrow keys). Programs fire on their own. Collect data shards to level up
+and install new programs; open data caches for cyberware. `Esc` / `P` pauses, `♪` mutes.
 
 > Fan project, not affiliated with or endorsed by the original developer. It contains **no assets from
-> the original game**: all graphics are drawn procedurally and all text is generated. Only numeric
+> the original game**: all graphics are drawn procedurally, all sound is synthesised at runtime and all
+> text is generated. Only numeric
 > balance data and short names are derived from the original's data tables.
 
 ## What is in it
@@ -23,7 +25,7 @@ new magic; open treasure chests for artifacts. `Esc` / `P` pauses.
 | XP curve | 128 levels | original table |
 
 Not implemented yet: classes, magic combinations (fusions), synergies, research, zones, the 5 remaining
-traits, meta-progression, sound.
+traits, meta-progression.
 
 ## Development
 
@@ -43,8 +45,9 @@ Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`.
 src/
   data/
     game-data.json   numbers distilled from the original's tables (generated, do not edit)
-    tuning.ts        everything hand-tuned: base spell stats, waves, drop rates, trait text
-  engine/            input (virtual joystick), spatial grid, math helpers
+    tuning.ts        everything hand-tuned: base spell stats, waves, drop rates
+    theme.ts         the cyberpunk skin: display names, card text, colours, vocabulary
+  engine/            input (virtual joystick), audio (WebAudio synth), spatial grid, math helpers
   game/
     effects.ts       effect id -> stat key table
     stats.ts         StatSheet: folds [effectId, value] pairs into flat / pct / mul buckets
@@ -72,6 +75,11 @@ never inspects upgrades; it only reads stats such as `fireball.dmg` or `cd` from
 - **Add a spell** - subclass `Spell` in `src/game/spells/`, register it in `spells/index.ts`, add its base
   stats to `SPELLS` in `tuning.ts` and its effect ids to `effects.ts`.
 - **Balance** - `src/data/tuning.ts`.
+- **Re-skin** - `src/data/theme.ts` holds every player-facing name and colour (code and data keep the
+  original identifiers, e.g. the key `bolt` is shown as "Pulse Shot"); `src/style.css` styles the UI.
+- **Sound** - add a case to `AudioEngine.play` in `src/engine/audio.ts` and call `game.sound('name')`.
+  Spell cast sounds are mapped in `CAST_SFX` in `spells/spell.ts`. The music is the step sequencer in
+  `scheduleStep`.
 - **New enemy look or effect** - `src/render/renderer.ts`.
 
 ## Reverse-engineering notes

@@ -1,4 +1,5 @@
 /** Decides what spawns and when, following the wave table in tuning.ts. */
+import { ENEMY_COLORS } from '../data/theme';
 import { BOSSES, GAME, WAVES, type Wave } from '../data/tuning';
 import { TAU, clamp, pick, rand } from '../engine/math';
 import { ENEMIES } from './content';
@@ -34,6 +35,7 @@ export class Director {
       if (boss) {
         this.announce = { text: `${boss.def.name} approaches`, t: 3.5 };
         g.shake = 8;
+        g.sound('boss');
       }
     }
 
@@ -64,6 +66,8 @@ export class Director {
     const dist = g.viewR + 50 + rand(0, 60);
     const e: Enemy = {
       def, kind,
+      color: kind === 'boss' ? '#ff2e4d' : ENEMY_COLORS[def.id % ENEMY_COLORS.length],
+      shape: def.id % 5,
       x: g.player.x + Math.cos(angle) * dist,
       y: g.player.y + Math.sin(angle) * dist,
       r: clamp(7 + Math.sqrt(def.hp) * 0.55, 10, 62),

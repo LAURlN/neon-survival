@@ -6,8 +6,16 @@
  * accumulated for `<key>.<stat>`. To add a spell: subclass, implement `cast`,
  * register it in spells/index.ts and give it an entry in tuning.ts.
  */
+import type { Sfx } from '../../engine/audio';
 import type { SpellDef } from '../content';
 import type { Game } from '../game';
+
+/** Sound played when a spell fires. Spells not listed are silent (their explosions speak for them). */
+const CAST_SFX: Record<string, Sfx> = {
+  bolt: 'shoot', fireball: 'launch', spirit: 'dart', nova: 'cryo', tsunami: 'wave', cloak: 'buff',
+  cyclone: 'wave', arma: 'purge', incin: 'flame', ebolt: 'launch', blizzard: 'cryo', ray: 'laser',
+  circle: 'buff', lava: 'flame',
+};
 
 export abstract class Spell {
   level = 1;
@@ -82,6 +90,8 @@ export abstract class Spell {
       if (this.cast() === false) {
         this.timer = 0.15; // Nothing to do (no target) - retry shortly.
       } else {
+        const sfx = CAST_SFX[this.key];
+        if (sfx) this.g.sound(sfx);
         this.lastCooldown = this.cooldown();
         this.timer += this.lastCooldown;
         if (this.timer < 0) this.timer = 0;

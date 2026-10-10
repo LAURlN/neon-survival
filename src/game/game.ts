@@ -4,6 +4,7 @@
  * (hit / explode / spawnProjectile / addZone / addBeam / after / fx...).
  */
 import { GAME } from '../data/tuning';
+import type { Sfx } from '../engine/audio';
 import { Grid } from '../engine/grid';
 import type { Input } from '../engine/input';
 import { TAU, chance, clamp, dist2, distToSegment2, rand } from '../engine/math';
@@ -56,6 +57,8 @@ export class Game {
   /** Total damage dealt per spell key, shown on the result screen. */
   damageBy = new Map<string, number>();
   shake = 0;
+  /** Sound hook; main.ts points this at the audio engine. A no-op keeps the game headless-friendly. */
+  sound: (name: Sfx, power?: number) => void = () => {};
 
   private timers: { t: number; fn: () => void }[] = [];
   private nextChestAt = GAME.chestKills[0];
@@ -232,6 +235,8 @@ export class Game {
 
     e.hp -= d;
     e.flash = 0.09;
+    this.sound('hit');
+    if (this.textBudget > 4) this.sparks(e.x, e.y, e.color, crit ? 4 : 1, 140);
     this.damageBy.set(src, (this.damageBy.get(src) ?? 0) + Math.min(d, e.hp + d));
 
     if (this.textBudget > 0 && (crit || Math.random() < 0.35)) {
@@ -255,7 +260,10 @@ export class Game {
     if (e.dead) return;
     e.dead = true;
     this.kills++;
-    this.burst(e.x, e.y, e.r * 1.3, '#11151a', 0.35);
+    this.burst(e.x, e.y, e.r * 1.6, e.color, 0.3);
+    this.ring(e.x, e.y, e.r * 1.8, e.color, 0.25);
+    this.sparks(e.x, e.y, e.color, e.kind === 'normal' ? 6 : 24, 260);
+    this.sound(e.kind === 'boss' ? 'purge' : 'kill');
 
     if (e.kind === 'boss') {
       for (let i = 0; i < 24; i++) this.drop('mana', e.x + rand(-70, 70), e.y + rand(-70, 70), e.def.mana / 24);
@@ -287,6 +295,8 @@ export class Game {
     if (!opts.quiet) {
       this.ring(x, y, r, color, 0.3);
       this.burst(x, y, r * 0.8, color, 0.22);
+      this.sparks(x, y, color, Math.min(10, 3 + r / 20), 60 + r * 3);
+      this.sound('boom', r / 70);
     }
     this.grid.query(x, y, r, (e) => {
       if (e.dead) return;
@@ -520,16 +530,20 @@ export class Game {
   private collect(it: Pickup) {
     const p = this.player;
     if (it.kind === 'mana') {
+      this.sound('pick');
       this.gainXp(it.value);
       this.progression.onManaOrb();
     } else if (it.kind === 'life') {
       p.heal((p.maxHp * GAME.lifeOrbHeal * this.stats.mult('orbHeal')) / 100);
       this.ring(p.x, p.y, 40, '#7dff9a', 0.4);
+      this.sound('heal');
     } else if (it.kind === 'chest') {
       this.pendingChests++;
+      this.sound('chest');
     } else {
       for (const o of this.pickups) if (o.kind === 'mana') o.pulled = true;
       this.ring(p.x, p.y, this.viewR, '#9fd0ff', 0.6);
+      this.sound('buff');
     }
   }
 
@@ -539,6 +553,8 @@ export class Game {
       this.xp -= this.xpNeeded;
       this.level++;
       this.pendingLevelUps++;
+      this.sound('level');
+      this.ring(this.player.x, this.player.y, 120, '#5ff4ff', 0.5);
     }
   }
 
@@ -566,12 +582,32 @@ export class Game {
     }
     pts.push(x2, y2);
     this.fx.push({ kind: 'lightning', x: x1, y: y1, r: width, life, maxLife: life, color, pts });
+    this.sound('zap');
+  }
+
+  /** Short-lived particles flying outward. */
+  sparks(x: number, y: number, color: string, count: number, speed = 200) {
+    if (this.fx.length > 380) return;
+    for (let i = 0; i < count; i++) {
+      const a = rand(0, TAU);
+      const v = speed * rand(0.35, 1);
+      const life = rand(0.2, 0.45);
+      this.fx.push({ kind: 'spark', x, y, r: rand(1.2, 2.4), life, maxLife: life, color,
+                     vx: Math.cos(a) * v, vy: Math.sin(a) * v });
+    }
   }
 
   private updateFx(dt: number) {
     for (const f of this.fx) {
       f.life -= dt;
       if (f.kind === 'text') f.y -= 34 * dt;
+      else if (f.kind === 'spark') {
+        f.x += f.vx! * dt;
+        f.y += f.vy! * dt;
+        const k = Math.exp(-5 * dt);
+        f.vx! *= k;
+        f.vy! *= k;
+      }
     }
     if (this.fx.length > 0 && this.fx.some((f) => f.life <= 0)) this.fx = this.fx.filter((f) => f.life > 0);
     if (this.fx.length > 500) this.fx.splice(0, this.fx.length - 500);

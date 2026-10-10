@@ -6,6 +6,10 @@ export type EnemyKind = 'normal' | 'elite' | 'boss';
 export interface Enemy {
   def: EnemyDef;
   kind: EnemyKind;
+  /** Neon outline colour. */
+  color: string;
+  /** Body shape index, see renderer. */
+  shape: number;
   x: number;
   y: number;
   r: number;

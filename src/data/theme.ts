@@ -1,0 +1,127 @@
+/**
+ * Cyberpunk re-skin: display names, card text and colours.
+ *
+ * The data file and the code keep the original identifiers (spell keys, trait
+ * ids); this file only decides what the player sees. Anything not listed here
+ * falls back to its name in game-data.json.
+ */
+
+export const VOCAB = {
+  title: 'NEON SURVIVAL',
+  tagline: 'A cyberpunk remake of Magic Survival · unofficial fan project',
+  spell: 'program',
+  newSpell: 'New program',
+  newPassive: 'New upgrade',
+  passive: 'Upgrade',
+  artifact: 'cyberware',
+  chest: 'DATA CACHE',
+  levelUp: 'LEVEL',
+  trait: 'mod',
+  chooseTrait: 'Install a mod',
+  over: 'CONNECTION LOST',
+};
+
+export const SPELL_THEME: Record<string, { name: string; desc: string; color: string }> = {
+  bolt: { name: 'Pulse Shot', desc: 'Fires pulses at the nearest hostile.', color: '#5ff4ff' },
+  fireball: { name: 'Plasma Grenade', desc: 'Launches an explosive plasma charge.', color: '#ff7a1a' },
+  spirit: { name: 'Combat Drone', desc: 'A drone escorts you and fires homing darts.', color: '#6dffb0' },
+  satellite: { name: 'Orbital', desc: 'A blade-node circles you, shredding what it touches.', color: '#7aa8ff' },
+  nova: { name: 'Cryo Burst', desc: 'A coolant blast around you that freezes hostiles.', color: '#9ae8ff' },
+  shield: { name: 'Hardlight Barrier', desc: 'Blocks one hit, then recharges.', color: '#ffe066' },
+  thunder: { name: 'Ion Strike', desc: 'Ion bolts strike nearby hostiles from above.', color: '#fff35c' },
+  zone: { name: 'Tesla Field', desc: 'A live field around you shocks hostiles repeatedly.', color: '#4d7cff' },
+  tsunami: { name: 'Shockwave', desc: 'Pressure waves sweep the street, pushing hostiles back.', color: '#2bd4ff' },
+  meteor: { name: 'Kinetic Strike', desc: 'An orbital slug drops on a random location.', color: '#ff4d2e' },
+  cloak: { name: 'Optical Camo', desc: 'Briefly become untouchable and move faster.', color: '#b78cff' },
+  cyclone: { name: 'Vortex', desc: 'A growing vortex that drifts outward.', color: '#8dffe0' },
+  shock: { name: 'Arc Discharge', desc: 'Releases an arc of current in a random direction.', color: '#c08bff' },
+  arma: { name: 'System Purge', desc: 'Deletes every hostile on the field.', color: '#ff2e4d' },
+  incin: { name: 'Flamethrower', desc: 'Sprays fire at the nearest hostile.', color: '#ff9a2e' },
+  ebolt: { name: 'Photon Orb', desc: 'A slow orb that passes through hostiles.', color: '#3dffea' },
+  blizzard: { name: 'Cryo Barrage', desc: 'Coolant shells rain around you and freeze hostiles.', color: '#cfeeff' },
+  ray: { name: 'Laser', desc: 'A beam that cuts through everything in its path.', color: '#ff4dd8' },
+  circle: { name: 'Overclock', desc: 'Amplifies your ATK by 20% for a while.', color: '#ffd23c' },
+  lava: { name: 'Acid Pool', desc: 'A pool of acid that dissolves hostiles inside.', color: '#b6ff2e' },
+  flash: { name: 'Breach Charge', desc: 'A sudden detonation on a nearby hostile.', color: '#ffffff' },
+};
+
+/** Passive id -> name. */
+export const PASSIVE_THEME: Record<number, string> = {
+  31: 'Processor',
+  32: 'Clock Speed',
+  33: 'Chassis',
+  34: 'Servos',
+  35: 'Amplifier',
+  36: 'Capacitor',
+  37: 'Targeting',
+  38: 'Scanner',
+  39: 'Overload',
+};
+
+/** Trait id -> [name, text]. The text describes behaviour; stat changes are appended automatically. */
+export const TRAIT_THEME: Record<number, [name: string, text: string]> = {
+  362: ['Railgun', 'Pulses pierce every hostile.'],
+  363: ['Flak Rounds', 'Pulses split into three and explode.'],
+  364: ['Multi-Lock', 'Fires at two additional targets.'],
+  365: ['Burst Fire', ''],
+  366: ['Suppression', 'Pulses spray in random directions.'],
+  371: ['Overcharge', 'The first grenade of each volley is 1.5× larger and stronger.'],
+  372: ['Nerve Gas', 'The blast lingers and damages hostiles three times.'],
+  380: ['Swarm Protocol', ''],
+  381: ['Mono-Blade', 'Blades materialise directly on their target.'],
+  389: ['Gyro Surge', 'Rotation speed surges up to 3× and back.'],
+  390: ['Twin Rings', 'Orbitals circle in two rings.'],
+  391: ['Fusion Core', 'All Orbitals merge into one giant core that hits every 0.3s.'],
+  398: ['Deep Freeze', 'Freezes hostiles for longer.'],
+  399: ['Cascade', 'Detonates three times, each 1.5× larger and stronger.'],
+  400: ['Seismic Charge', 'Stuns instead of freezing.'],
+  407: ['Layered Barrier', ''],
+  408: ['Fast Rebuild', 'Recharges two barriers at once.'],
+  409: ['Reactive Field', 'A broken barrier leaves a damaging field that follows you.'],
+  416: ['Double Tap', 'Strikes one to three times in a row.'],
+  417: ['Carpet Strike', 'Strikes random locations with a larger blast.'],
+  418: ['Judgment', 'All strikes merge into a single massive bolt.'],
+  425: ['High Voltage', ''],
+  426: ['EMP', 'Every 4th hit stuns the hostile.'],
+  427: ['Thermal Pulse', 'Becomes an expanding ring of heat that hits once per pulse.'],
+  434: ['Convergence', 'Waves arrive from every direction at once and freeze.'],
+  435: ['Wake', 'Waves launch in the direction you are moving.'],
+  436: ['Overpressure', ''],
+  443: ['Thermite', 'Lands instantly and leaves a burning crater.'],
+  444: ['Cluster Drop', ''],
+  445: ['Rod from God', 'All strikes merge into one enormous impact.'],
+  452: ['Extended Cell', ''],
+  453: ['Phase Blast', 'Detonates around you when the camo ends.'],
+  454: ['Leech', 'Kills while cloaked repair you; +33% data while cloaked.'],
+  461: ['Storm Cell', ''],
+  462: ['Ball Lightning', 'Shrinks instead of growing and fires sparks in random directions.'],
+  463: ['Singularity', 'Stationary vortexes that grow extremely fast.'],
+  470: ['Chain Arc', 'Chains one to three times in a row.'],
+  472: ['Superconductor', 'Always aims at a nearby hostile.'],
+  479: ['Aftershock', 'Hostiles spawned in the next 20s have up to 40% less HP.'],
+  480: ['Reboot', 'Every 4th purge fully repairs you.'],
+  481: ['Data Mining', 'Each data shard reduces the remaining cooldown by 1%.'],
+  488: ['Pressure Build', 'Each flame is stronger than the last (up to ×4 damage).'],
+  489: ['Napalm', 'Leaves two burning patches on every burst.'],
+  490: ['Tri-Nozzle', 'Also sprays fire to both sides.'],
+  497: ['Boomerang', 'Orbs return to you when they expire.'],
+  498: ['Ionised', 'Orbs hit every 0.3s.'],
+  499: ['Supernova', 'Orbs spread in all directions and explode for double damage.'],
+  506: ['Heat Sink', 'While active, all hostiles slow by 3% per second.'],
+  507: ['Heavy Shells', 'Fewer, far heavier shells.'],
+  508: ['Incendiary', 'Each shell detonates twice but no longer freezes.'],
+  515: ['Mirror', 'A second beam fires in the opposite direction.'],
+  516: ['Sweep', 'Beams sweep around you.'],
+  517: ['Disco', 'Beams fire in random directions and last far longer.'],
+  524: ['Turbo', 'While active, all program cooldowns are 15% shorter.'],
+  525: ['Fabricator', 'Creates 5 data shards when triggered.'],
+  526: ['Redline', 'Doubles the ATK amplification.'],
+  533: ['Corrosion', 'Dissolving hostiles take up to 30% more damage.'],
+  534: ['Splash', ''],
+  535: ['Flood', 'All pools merge into one vast lake of acid.'],
+  542: ['Shaped Charge', 'The centre of the blast deals massive bonus damage.'],
+  543: ['Wide Net', 'Charges appear over a much wider area.'],
+};
+
+/** Neon colours for hostiles, cycled by enemy id. */
+export const ENEMY_COLORS = ['#ff2bd6', '#ff5c8a', '#ff9a1f', '#b14cff', '#ff3b5c', '#f5e663'];
