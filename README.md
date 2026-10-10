@@ -3,7 +3,7 @@
 An unofficial, from-scratch browser remake of the mobile game *Magic Survival* with a cyberpunk skin,
 playable on a phone.
 
-**Play:** https://laurln.github.io/magic-survival-web/
+**Play:** https://laurln.github.io/neon-survival/
 
 Drag anywhere to move (or WASD / arrow keys). Programs fire on their own. Collect data shards to level up
 and install new programs; open data caches for cyberware. `Esc` / `P` pauses, `♪` mutes.

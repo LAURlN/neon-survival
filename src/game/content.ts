@@ -3,7 +3,7 @@
  * rule that decides which upgrades are playable.
  */
 import raw from '../data/game-data.json';
-import { PASSIVE_THEME, SPELL_THEME, TRAIT_THEME } from '../data/theme';
+import { ARTIFACT_THEME, PASSIVE_THEME, SPELL_THEME, TRAIT_THEME } from '../data/theme';
 import { GRADES, SPELLS, TRAITS, type SpellTuning } from '../data/tuning';
 import { EFFECTS, describeEffect } from './effects';
 import type { Effect } from './stats';
@@ -111,7 +111,9 @@ export const SPELL_BY_ID = new Map(SPELL_DEFS.map((s) => [s.id, s]));
 export const PASSIVES = data.passives
   .filter((p) => isSupported(p.effects))
   .map((p) => ({ ...p, name: PASSIVE_THEME[p.id] ?? p.name }));
-export const ARTIFACTS = data.artifacts.filter((a) => isSupported(a.effects) && a.grade in GRADES);
+export const ARTIFACTS = data.artifacts
+  .filter((a) => isSupported(a.effects) && a.grade in GRADES)
+  .map((a) => ({ ...a, name: ARTIFACT_THEME[a.id] ?? a.name }));
 
 /** Mana needed to go from `level` to `level + 1`. */
 export function xpForLevel(level: number): number {

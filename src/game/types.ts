@@ -126,6 +126,9 @@ export interface Pickup {
   value: number;
   /** Being pulled towards the player. */
   pulled: boolean;
+  /** Seconds since the pull started, and current speed towards the player (negative = hopping away). */
+  pullT: number;
+  speed: number;
   age: number;
   dead: boolean;
 }

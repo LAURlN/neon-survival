@@ -170,11 +170,11 @@ export class Game {
         e.frozen -= dt;
       } else {
         let sp = e.speed * speedMult;
-        // Rushers (trait 2) alternate between creeping and dashing.
+        // Rushers (trait 2) keep pace with the pack, then lunge once they are close.
         if (e.def.traits.includes(2)) {
           e.dashT -= dt;
-          if (e.dashT < -0.9) e.dashT = rand(1.6, 2.6);
-          sp *= e.dashT < 0 ? 2.4 : 0.55;
+          if (e.dashT <= 0 && d < GAME.lungeRange) e.dashT = GAME.lungeTime + GAME.lungeCooldown;
+          if (e.dashT > GAME.lungeCooldown) sp *= GAME.lungeSpeed;
         }
         e.x += dx * sp * dt;
         e.y += dy * sp * dt;
@@ -212,8 +212,20 @@ export class Game {
         const overlap = (e.r + o.r) * 0.8 - d;
         if (overlap > 0) {
           const push = Math.min(overlap, 60 * dt) * (o.kind === 'boss' ? 1 : 0.5);
-          e.x += (dx / d) * push;
-          e.y += (dy / d) * push;
+          let mx = (dx / d) * push;
+          let my = (dy / d) * push;
+          // Only spread sideways: never shove an enemy away from the player, or the
+          // crowd visibly brakes as it closes in.
+          const tx = p.x - e.x;
+          const ty = p.y - e.y;
+          const tl = Math.hypot(tx, ty) || 1;
+          const back = (mx * tx + my * ty) / tl;
+          if (back < 0) {
+            mx -= (tx / tl) * back;
+            my -= (ty / tl) * back;
+          }
+          e.x += mx;
+          e.y += my;
         }
       });
     }
@@ -270,7 +282,7 @@ export class Game {
       this.drop('chest', e.x, e.y, 1);
       this.shake = 10;
     } else {
-      this.drop('mana', e.x, e.y, e.def.mana);
+      this.drop('mana', e.x + rand(-5, 5), e.y + rand(-5, 5), e.def.mana);
       if (e.kind === 'elite') this.drop('chest', e.x, e.y, 1);
       else if (chance(GAME.lifeOrbChance)) this.drop('life', e.x + 10, e.y, 1);
       else if (chance(0.12)) this.drop('magnet', e.x + 10, e.y, 1);
@@ -502,7 +514,7 @@ export class Game {
         return;
       }
     }
-    this.pickups.push({ kind, x, y, value, pulled: false, age: 0, dead: false });
+    this.pickups.push({ kind, x, y, value, pulled: false, pullT: 0, speed: 0, age: 0, dead: false });
   }
 
   private updatePickups(dt: number) {
@@ -515,12 +527,20 @@ export class Game {
       const d2 = dist2(p.x, p.y, it.x, it.y);
       if (!it.pulled && d2 < range2 && it.kind !== 'chest') it.pulled = true;
       if (it.pulled) {
+        // A short hop away from the player, then a smooth accelerating dive in.
+        it.pullT += dt;
+        it.speed = Math.min(GAME.pickupMaxSpeed, -GAME.pickupPop + GAME.pickupAccel * it.pullT);
         const d = Math.sqrt(d2) || 1;
-        const sp = 420 + it.age * 200;
-        it.x += ((p.x - it.x) / d) * sp * dt;
-        it.y += ((p.y - it.y) / d) * sp * dt;
-      }
-      if (d2 < (p.r + 12) ** 2) {
+        const step = it.speed * dt;
+        if (step >= d - p.r) {
+          it.dead = true;
+          this.collect(it);
+          continue;
+        }
+        it.x += ((p.x - it.x) / d) * step;
+        it.y += ((p.y - it.y) / d) * step;
+      } else if (d2 < (p.r + 10) ** 2) {
+        // Chests are not magnetic; walk over them.
         it.dead = true;
         this.collect(it);
       }
@@ -531,6 +551,7 @@ export class Game {
     const p = this.player;
     if (it.kind === 'mana') {
       this.sound('pick');
+      this.fx.push({ kind: 'ring', x: p.x, y: p.y, r: 16, life: 0.16, maxLife: 0.16, color: '#4da3ff' });
       this.gainXp(it.value);
       this.progression.onManaOrb();
     } else if (it.kind === 'life') {

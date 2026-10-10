@@ -18,9 +18,18 @@ export const GAME = {
   baseCrit: 3,
   baseCritMult: 150,
   pickupRange: 95,
+  /** Shard pickup motion: hop-away speed, acceleration towards the player, top speed. */
+  pickupPop: 150,
+  pickupAccel: 1500,
+  pickupMaxSpeed: 780,
   hitInvuln: 0.45,
   /** Enemy `speed` stat (9..34) -> world units per second. */
-  enemySpeedScale: 3.1,
+  enemySpeedScale: 2.8,
+  /** Rusher enemies: lunge at `lungeSpeed`x for `lungeTime`s when within `lungeRange`. */
+  lungeRange: 190,
+  lungeSpeed: 2.1,
+  lungeTime: 0.55,
+  lungeCooldown: 2.4,
   /** Enemy HP growth per minute survived: hp * (1 + a*m + b*m^2). */
   enemyHpGrowth: [0.1, 0.012],
   enemyAtkGrowth: 0.03,

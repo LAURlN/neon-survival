@@ -117,7 +117,7 @@ export class Renderer {
     this.glow(p.x, p.y, 300, '#1c4f8a', 0.5); // pool of light around the player
     for (const z of g.zones) if (visible(z.x, z.y, z.r)) this.drawZone(z, g.time);
     for (const f of g.fx) if (f.kind === 'mark') this.drawFx(f);
-    for (const it of g.pickups) if (visible(it.x, it.y, 20)) this.drawPickup(it, g.time);
+    for (const it of g.pickups) if (visible(it.x, it.y, 20)) this.drawPickup(it, g.time, p.x, p.y);
 
     ctx.globalCompositeOperation = 'source-over';
     for (const e of g.enemies) if (visible(e.x, e.y, e.r + 14)) this.drawEnemy(e, p.x, p.y, g.time);
@@ -359,14 +359,32 @@ export class Renderer {
     ctx.fillRect(p.x - bw / 2, by, bw * frac, 3);
   }
 
-  private drawPickup(it: Pickup, time: number) {
+  private drawPickup(it: Pickup, time: number, px: number, py: number) {
     const { ctx } = this;
-    const y = it.y + Math.sin(time * 4 + it.x) * 1.5;
+    // Resting pickups bob; ones in flight do not, so their path stays clean.
+    const y = it.pulled ? it.y : it.y + Math.sin(time * 4 + it.x) * 1.5;
     if (it.kind === 'mana') {
       const big = it.value >= 40;
       const mid = it.value >= 8;
-      const s = big ? 6.5 : mid ? 5 : 3.6;
+      // Pop in when dropped.
+      const pop = Math.min(1, it.age / 0.18);
+      const s = (big ? 6.5 : mid ? 5 : 3.6) * (pop < 1 ? pop * (2 - pop) * 1.15 : 1);
       const color = big ? '#ffd23c' : mid ? '#3dffea' : '#4da3ff';
+      if (it.pulled && it.speed > 60) {
+        // Streak behind a shard that is flying in.
+        const d = Math.hypot(px - it.x, py - y) || 1;
+        const len = Math.min(26, it.speed * 0.035);
+        ctx.strokeStyle = color;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = s * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(it.x, y);
+        ctx.lineTo(it.x - ((px - it.x) / d) * len, y - ((py - y) / d) * len);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.lineCap = 'butt';
+      }
       this.glow(it.x, y, s * 3.2, color, 0.6);
       ctx.fillStyle = color;
       ctx.beginPath();
