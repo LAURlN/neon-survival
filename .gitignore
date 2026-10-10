@@ -1,0 +1,7 @@
+node_modules/
+dist/
+# Reverse-engineering inputs and outputs: the original game and anything
+# extracted from it stay local and are never committed.
+*.xapk
+*.apk
+re/

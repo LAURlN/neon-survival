@@ -1,0 +1,11 @@
+{
+  "name": "Magic Survival Web",
+  "short_name": "Magic Survival",
+  "description": "Unofficial browser remake of Magic Survival.",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#1b1e21",
+  "theme_color": "#1b1e21",
+  "icons": [{ "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
