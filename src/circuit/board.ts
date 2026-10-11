@@ -128,6 +128,14 @@ export class Board {
     return true;
   }
 
+  /** Make this board's layout match `src`, keeping the state of every tile that did not change. */
+  copyLayout(src: Board) {
+    for (const [key, t] of this.tiles) if (src.tiles.get(key)?.def !== t.def) this.tiles.delete(key);
+    for (const o of src.tiles.values()) (this.tiles.get(o.key) ?? this.set(o.x, o.y, o.def.id, o.rot)).rot = o.rot;
+    this.rate = src.rate;
+    this.changed();
+  }
+
   private changed() {
     const b = this.bounds;
     b.x0 = b.y0 = Infinity;
@@ -158,7 +166,7 @@ export class Board {
     return this.acc / TICK;
   }
 
-  /** Advance the board. With `silent`, emitters only update their labels (used by the editor). */
+  /** Advance the board. With `silent`, emitters only update their labels (the editor's demo board). */
   update(dt: number, silent = false) {
     this.acc += dt;
     while (this.acc >= TICK) {

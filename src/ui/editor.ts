@@ -1,7 +1,8 @@
 /**
  * The circuit editor: a full-screen view of the board with the spare tiles in
- * a tray underneath. The game is paused while it is open, but the board keeps
- * ticking silently so the player can watch sparks run through what they build.
+ * a tray underneath. The game and the real circuit are frozen while it is open.
+ * What moves on screen is a demo copy of the layout, so the player can watch
+ * sparks run through what they build without charging anything up for free.
  *
  *   tray tile, then empty cell   place
  *   placed tile                  select; tap again to turn it
@@ -44,6 +45,10 @@ export class BoardEditor {
   private readonly tray = el('div', 'ed-tray');
 
   private board: Board | null = null;
+  /** Copy of the layout that runs while the editor is open; never fires and is thrown away on close. */
+  private demo = new Board();
+  private demoVersion = -1;
+  private demoT = 0;
   private onClose: () => void = () => {};
   /** Centre of the view in board cells, and pixels per cell. */
   private cam = { x: 0, y: 0, s: 58 };
@@ -136,6 +141,8 @@ export class BoardEditor {
     this.sel = null;
     this.pick = null;
     this.trayVersion = -1;
+    this.demo = new Board();
+    this.demoVersion = -1;
     this.pointers.clear();
     const b = board.extent;
     this.cam.x = (b.x0 + b.x1) / 2;
@@ -258,19 +265,33 @@ export class BoardEditor {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     if (!this.board) return;
-    this.board.update(dt, true);
-    this.draw(dt);
+    this.step(dt);
     this.raf = requestAnimationFrame(this.frame);
   };
 
   /** Advance and redraw once; lets tests drive the editor without animation frames. */
   step(dt: number) {
-    this.board?.update(dt, true);
+    const board = this.board;
+    if (!board) return;
+    const demo = this.demo;
+    if (this.demoVersion !== board.version) {
+      this.demoVersion = board.version;
+      demo.copyLayout(board);
+    }
+    // The demo pretends the triggers happen, so event sources and sensor gates show what they would do.
+    demo.sense.near = demo.sense.moving = true;
+    const before = Math.floor(this.demoT);
+    this.demoT += dt;
+    if (Math.floor(this.demoT) !== before) {
+      demo.trigger('kill');
+      if (before % 3 === 0) demo.trigger('hurt');
+    }
+    demo.update(dt, true);
     this.draw(dt);
   }
 
   private draw(dt: number) {
-    const board = this.board!;
+    const board = this.demo;
     const { ctx, cam } = this;
     const dpr = this.canvas.width / (this.canvas.getBoundingClientRect().width || 1);
     const w = this.canvas.width / dpr;
@@ -374,7 +395,7 @@ export class BoardEditor {
       ctx.restore();
     }
 
-    if (t === this.sel) {
+    if (t.key === this.sel?.key) {
       ctx.globalAlpha = 1;
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
