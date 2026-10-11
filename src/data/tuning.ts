@@ -26,6 +26,8 @@ export const GAME = {
   pickupAccel: 1500,
   pickupMaxSpeed: 780,
   hitInvuln: 0.45,
+  /** Seconds of invulnerability after picking a level-up or cache reward, to get your bearings back. */
+  choiceInvuln: 1,
   /** Enemy `speed` stat (9..34) -> world units per second. */
   enemySpeedScale: 2.8,
   /** Rusher enemies: lunge at `lungeSpeed`x for `lungeTime`s when within `lungeRange`. */

@@ -1,6 +1,6 @@
 import './style.css';
 import { VOCAB } from './data/theme';
-import { DIFFICULTIES } from './data/tuning';
+import { DIFFICULTIES, GAME } from './data/tuning';
 import { AudioEngine } from './engine/audio';
 import { Input } from './engine/input';
 import { Game } from './game/game';
@@ -122,6 +122,7 @@ async function drainChoices(g: Game) {
     }
     if (game !== g) return; // The run was abandoned while a choice was open.
   }
+  g.player.invuln = Math.max(g.player.invuln, GAME.choiceInvuln);
   save();
   input.reset();
   audio.setPaused(false);
