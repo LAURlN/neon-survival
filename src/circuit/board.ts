@@ -5,6 +5,10 @@
  * Ten times a second every spark moves one cell. A spark flies straight until
  * it enters a tile; the tile's `op` decides what happens to it. A spark that
  * reaches an emitter is handed to `fire`, which turns it into a weapon.
+ *
+ * One rule keeps loops from printing energy: a tile can add energy to a given
+ * spark only once (`Spark.seen`), and a merged spark remembers everything its
+ * parts have been through. The Resonator is the deliberate, bounded exception.
  * The board knows nothing about the game world - it only reads `sense` and
  * `rate`, and reports through `fire`.
  */
@@ -236,7 +240,10 @@ export class Board {
         [s.dx, s.dy] = t.rot ? [s.dy, s.dx] : [-s.dy, -s.dx];
         break;
       case 'split': {
-        const mult = d.mult ?? 0.5;
+        // Any share above an even split is a bonus, so it is only paid out once per spark.
+        const even = 1 / (d.n ?? 2);
+        const mult = s.seen.has(t.key) ? even : d.mult ?? even;
+        s.seen.set(t.key, 1);
         for (const side of [1, -1]) {
           const c = cloneSpark(s);
           c.dx = -s.dy * side;
@@ -331,10 +338,12 @@ export class Board {
     const m = cloneSpark(best);
     m.energy = 0;
     for (const s of t.store) {
-      m.energy += s.energy * mult;
+      // Energy that already took this tile's bonus on an earlier lap passes through unchanged.
+      m.energy += s.energy * (s.seen.has(t.key) ? 1 : mult);
       m.count = Math.max(m.count, s.count);
       for (const [k, v] of s.seen) m.seen.set(k, Math.max(m.seen.get(k) ?? 0, v));
     }
+    m.seen.set(t.key, 1);
     t.store = [];
     m.x = m.px = t.x;
     m.y = m.py = t.y;
