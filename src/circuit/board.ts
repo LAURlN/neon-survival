@@ -149,7 +149,7 @@ export class Board {
   /** Queue a spark on every source that listens for this event. */
   trigger(kind: 'kill' | 'hurt') {
     for (const t of this.tiles.values()) {
-      if (t.def.op === 'source' && t.def.trigger === kind) t.pending = Math.min(t.pending + 1, kind === 'kill' ? 10 : 2);
+      if (t.def.op === 'source' && t.def.trigger === kind) t.pending = Math.min(t.pending + 1, 2);
     }
   }
 
