@@ -10,7 +10,7 @@ import type { Enemy, EnemyKind } from './types';
 export class Director {
   private timer = 1.5;
   private wave: Wave = WAVES[0];
-  private bossesSpawned = 0;
+  bossesSpawned = 0;
   private shardTimer = 1;
   private chestTimer = GAME.wildChestFirst;
   /** Shown by the HUD for a few seconds when a boss arrives. */
@@ -55,6 +55,13 @@ export class Director {
         this.spawn(pick(this.wave.ids), 'normal');
       }
     }
+  }
+
+  /** Pick up a saved run: bosses already met stay met, and the current wave does not re-announce itself. */
+  resume(bossesSpawned: number) {
+    this.bossesSpawned = bossesSpawned;
+    const minute = this.g.time / 60;
+    for (const w of WAVES) if (w.from <= minute) this.wave = w;
   }
 
   /** Shards and caches that appear without anything being killed. */

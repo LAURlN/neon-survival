@@ -173,8 +173,8 @@ export class UI {
     return b;
   }
 
-  /** Main menu: pick a difficulty, then start. */
-  showTitle(current: Difficulty, onStart: (d: Difficulty) => void) {
+  /** Main menu: pick a difficulty, then start. `saved` describes a run that can be continued. */
+  showTitle(current: Difficulty, onStart: (d: Difficulty) => void, saved: string | null = null, onContinue: () => void = () => {}) {
     const best = loadBest(current);
     const title = el('h1', 'glitch', VOCAB.title);
     title.dataset.text = VOCAB.title;
@@ -186,7 +186,7 @@ export class UI {
       b.addEventListener('click', () => {
         this.sfx('ui');
         saveDifficulty(d);
-        this.showTitle(d, onStart);
+        this.showTitle(d, onStart, saved, onContinue);
       });
       picker.append(b);
     }
@@ -202,7 +202,9 @@ export class UI {
       el('p', 'sub', note),
       el('p', 'sub', 'Drag anywhere to move (or WASD). Your circuit fires on its own. Level up to collect tiles, then tap ⌬ to wire them in.'),
       el('p', 'sub', best ? `Best on ${current.name}: ${formatTime(best.time)} · ${best.kills} kills · Lv ${best.level}` : `No record on ${current.name} yet.`),
-      this.button('JACK IN', () => onStart(current), true),
+      saved ? this.button('CONTINUE RUN', onContinue, true) : null,
+      saved ? el('p', 'sub', saved) : null,
+      this.button(saved ? 'NEW RUN' : 'JACK IN', () => onStart(current), !saved),
     );
   }
 

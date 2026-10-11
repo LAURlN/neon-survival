@@ -143,6 +143,16 @@ export class Board {
     return true;
   }
 
+  /** Replace everything with a saved layout and inventory. Unknown tile ids are dropped. */
+  restore(tiles: readonly TileSpot[], inventory: readonly (readonly [string, number])[]) {
+    this.tiles.clear();
+    this.inventory.clear();
+    this.sparks = [];
+    for (const t of tiles) if (TILES[t.id]) this.set(t.x, t.y, t.id, t.rot);
+    for (const [id, n] of inventory) if (TILES[id]) this.inventory.set(id, n);
+    this.changed();
+  }
+
   /** Every placed tile as plain data (for clipboards and saved loadouts). */
   layout(): TileSpot[] {
     return [...this.tiles.values()].map((t) => ({ id: t.def.id, x: t.x, y: t.y, rot: t.rot }));

@@ -72,6 +72,7 @@ src/
     director.ts      enemy spawning
     player.ts        movement, HP, damage taken
     boss.ts          boss attack patterns
+    save.ts          autosave: what a saved run contains and how it is rebuilt
     progression.ts   what level-ups and data caches offer
     effects.ts       effect id -> stat key table for upgrades and cyberware
     stats.ts         StatSheet: folds [effectId, value] pairs into flat / pct / mul buckets

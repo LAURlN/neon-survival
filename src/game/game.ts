@@ -71,8 +71,9 @@ export class Game {
   sound: (name: Sfx, power?: number) => void = () => {};
 
   private timers: { t: number; fn: () => void }[] = [];
-  private nextChestAt = GAME.chestKills[0];
-  private chestIndex = 0;
+  /** Kill count of the next cache drop, and how far down the list in tuning.ts we are. */
+  nextChestAt = GAME.chestKills[0];
+  chestIndex = 0;
   private textBudget = 0;
   private sparkBudget = 0;
 

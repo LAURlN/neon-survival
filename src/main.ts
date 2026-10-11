@@ -1,11 +1,13 @@
 import './style.css';
 import { VOCAB } from './data/theme';
+import { DIFFICULTIES } from './data/tuning';
 import { AudioEngine } from './engine/audio';
 import { Input } from './engine/input';
 import { Game } from './game/game';
+import { clearRun, loadRun, restore, saveRun } from './game/save';
 import { Renderer } from './render/renderer';
 import { BoardEditor } from './ui/editor';
-import { UI, loadDifficulty } from './ui/ui';
+import { UI, formatTime, loadDifficulty } from './ui/ui';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const input = new Input(canvas);
@@ -19,13 +21,32 @@ let difficulty = loadDifficulty();
 /** True while the simulation should advance. */
 let running = false;
 let last = performance.now();
+/** Seconds of play since the run was last written to storage. */
+let sinceSave = 0;
+const SAVE_EVERY = 5;
 
-function start() {
+/** Write the current run to storage so it can be continued after a reload. */
+function save() {
+  if (game && !game.over) saveRun(game);
+  sinceSave = 0;
+}
+
+/** Begin a run: a fresh one, or the saved one if `resume` is set. */
+function start(resume = false) {
   // Browsers only allow audio after a gesture; start() always runs from a button press.
   audio.unlock();
   audio.stopMusic();
   audio.startMusic();
-  game = new Game(input, difficulty);
+  const saved = resume ? loadRun() : null;
+  try {
+    game = saved ? restore(input, saved) : new Game(input, difficulty);
+  } catch {
+    // A save from an incompatible version: drop it and start clean.
+    clearRun();
+    game = new Game(input, difficulty);
+  }
+  // "Jack in again" after a continued run should stay on that run's difficulty.
+  difficulty = game.difficulty;
   game.sound = (name, power) => audio.play(name, power);
   ui.close();
   ui.showHud(true);
@@ -35,13 +56,18 @@ function start() {
 
 function toTitle() {
   audio.stopMusic();
+  save();
   running = false;
   game = null;
   ui.showHud(false);
+  const saved = loadRun();
+  const label = saved
+    ? `${DIFFICULTIES.find((d) => d.id === saved.difficulty)?.name ?? ''} · ${formatTime(saved.time)} · Lv ${saved.level} · ${saved.kills} kills`
+    : null;
   ui.showTitle(difficulty, (d) => {
     difficulty = d;
     start();
-  });
+  }, label, () => start(true));
 }
 
 function pause() {
@@ -49,6 +75,7 @@ function pause() {
   running = false;
   input.reset();
   audio.setPaused(true);
+  save();
   const resume = () => {
     ui.close();
     audio.setPaused(false);
@@ -67,6 +94,7 @@ function openEditor() {
   input.reset();
   audio.setPaused(true);
   editor.open(game.board, () => {
+    save();
     input.reset();
     audio.setPaused(false);
     running = true;
@@ -78,19 +106,23 @@ async function drainChoices(g: Game) {
   running = false;
   input.reset();
   audio.setPaused(true);
+  // A choice only stops counting as pending once it has been made, so a run saved
+  // while a choice is on screen offers it again when it is continued.
   while (g.pendingLegendary > 0 || g.pendingChests > 0 || g.pendingLevelUps > 0) {
+    save();
     if (g.pendingLegendary > 0) {
-      g.pendingLegendary--;
       await ui.choose(VOCAB.legendary, g.progression.legendaryOffers());
+      g.pendingLegendary--;
     } else if (g.pendingChests > 0) {
-      g.pendingChests--;
       await ui.choose(VOCAB.chest, g.progression.chestOffers());
+      g.pendingChests--;
     } else {
+      await ui.choose(`${VOCAB.levelUp} ${g.level - g.pendingLevelUps + 1}`, g.progression.levelOffers());
       g.pendingLevelUps--;
-      await ui.choose(`${VOCAB.levelUp} ${g.level - g.pendingLevelUps}`, g.progression.levelOffers());
     }
     if (game !== g) return; // The run was abandoned while a choice was open.
   }
+  save();
   input.reset();
   audio.setPaused(false);
   running = true;
@@ -108,7 +140,9 @@ function frame(now: number) {
       game.update(dt);
       // The soundtrack adds layers as the run heats up.
       audio.intensity = Math.min(1, game.time / 240 + game.enemies.length / 500);
+      if ((sinceSave += dt) > SAVE_EVERY) save();
       if (game.over) {
+        clearRun();
         running = false;
         audio.stopMusic();
         audio.play('over');
@@ -137,8 +171,11 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'KeyE') openEditor();
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) pause();
+  if (!document.hidden) return;
+  save();
+  pause();
 });
+window.addEventListener('pagehide', save);
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 // Mobile browsers suspend audio when the tab loses focus; any tap brings it back.
 window.addEventListener('pointerdown', () => audio.unlock());
