@@ -66,7 +66,8 @@ export class Director {
     const minute = g.time / 60;
     const [a, b] = GAME.enemyHpGrowth;
 
-    let hp = def.hp * (1 + a * minute + b * minute * minute) * g.stats.mult('enemyHp', -80);
+    const diff = g.difficulty;
+    let hp = def.hp * diff.hp * (1 + diff.growth * (a * minute + b * minute * minute)) * g.stats.mult('enemyHp', -80);
     hp *= 1 - g.buffs.enemyHpCut;
     if (kind === 'boss') hp *= 1 + Math.floor(this.bossesSpawned / BOSSES.ids.length) * 1.5;
 

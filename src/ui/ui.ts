@@ -1,5 +1,6 @@
 /** DOM user interface: HUD and the overlay screens (title, choices, pause, result). */
 import { VOCAB } from '../data/theme';
+import { DIFFICULTIES, type Difficulty } from '../data/tuning';
 import type { Sfx } from '../engine/audio';
 import { PASSIVES } from '../game/content';
 import type { Game } from '../game/game';
@@ -34,19 +35,42 @@ export interface Record_ {
 
 const STORAGE_KEY = 'magic-survival-web:best';
 
-export function loadBest(): Record_ | null {
+const DIFFICULTY_KEY = 'neon-survival:difficulty';
+
+/** Records are kept per difficulty; Easy keeps the original key so old records carry over. */
+const bestKey = (d: Difficulty) => (d === DIFFICULTIES[0] ? STORAGE_KEY : `${STORAGE_KEY}:${d.id}`);
+
+export function loadBest(d: Difficulty): Record_ | null {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
+    return JSON.parse(localStorage.getItem(bestKey(d)) ?? 'null');
   } catch {
     return null;
   }
 }
 
-function saveBest(r: Record_) {
+function saveBest(d: Difficulty, r: Record_) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(r));
+    localStorage.setItem(bestKey(d), JSON.stringify(r));
   } catch {
     // Private browsing: records just don't persist.
+  }
+}
+
+/** The difficulty picked last time, or the easiest. */
+export function loadDifficulty(): Difficulty {
+  try {
+    const id = localStorage.getItem(DIFFICULTY_KEY);
+    return DIFFICULTIES.find((d) => d.id === id) ?? DIFFICULTIES[0];
+  } catch {
+    return DIFFICULTIES[0];
+  }
+}
+
+function saveDifficulty(d: Difficulty) {
+  try {
+    localStorage.setItem(DIFFICULTY_KEY, d.id);
+  } catch {
+    // Private browsing: the choice just doesn't persist.
   }
 }
 
@@ -149,16 +173,36 @@ export class UI {
     return b;
   }
 
-  showTitle(onStart: () => void) {
-    const best = loadBest();
+  /** Main menu: pick a difficulty, then start. */
+  showTitle(current: Difficulty, onStart: (d: Difficulty) => void) {
+    const best = loadBest(current);
     const title = el('h1', 'glitch', VOCAB.title);
     title.dataset.text = VOCAB.title;
+
+    const picker = el('div', 'difficulty');
+    for (const d of DIFFICULTIES) {
+      const b = el('button', d === current ? 'diff on' : 'diff', d.name);
+      b.style.setProperty('--c', d.color);
+      b.addEventListener('click', () => {
+        this.sfx('ui');
+        saveDifficulty(d);
+        this.showTitle(d, onStart);
+      });
+      picker.append(b);
+    }
+    const note = current === DIFFICULTIES[0]
+      ? 'Hostiles at their normal strength.'
+      : `Hostiles start with ×${current.hp} HP and toughen up ×${current.growth} as fast.`;
+
     this.open(
       title,
       el('p', 'sub', VOCAB.tagline),
+      el('h2', '', 'DIFFICULTY'),
+      picker,
+      el('p', 'sub', note),
       el('p', 'sub', 'Drag anywhere to move (or WASD). Your circuit fires on its own. Level up to collect tiles, then tap ⌬ to wire them in.'),
-      best ? el('p', 'sub', `Best: ${formatTime(best.time)} · ${best.kills} kills · Lv ${best.level}`) : null,
-      this.button('JACK IN', onStart, true),
+      el('p', 'sub', best ? `Best on ${current.name}: ${formatTime(best.time)} · ${best.kills} kills · Lv ${best.level}` : `No record on ${current.name} yet.`),
+      this.button('JACK IN', () => onStart(current), true),
     );
   }
 
@@ -203,6 +247,7 @@ export class UI {
     const pr = g.progression;
     const weapons = new Set<string>();
     for (const t of g.board.tiles.values()) if (t.label) weapons.add(t.label);
+    list.append(el('div', '', `Difficulty: ${g.difficulty.name}`));
     list.append(el('div', '', `Firing: ${[...weapons].join(', ') || 'nothing — wire a reactor to an emitter'}`));
     const upgrades = PASSIVES.filter((p) => pr.passives.has(p.id)).map((p) => `${p.name} ${pr.passives.get(p.id)}`);
     if (upgrades.length) list.append(el('div', '', `Upgrades: ${upgrades.join(', ')}`));
@@ -220,11 +265,11 @@ export class UI {
     );
   }
 
-  showResult(g: Game, onRestart: () => void) {
+  showResult(g: Game, onRestart: () => void, onMenu: () => void) {
     const record: Record_ = { time: g.time, kills: g.kills, level: g.level };
-    const best = loadBest();
+    const best = loadBest(g.difficulty);
     const isBest = !best || record.time > best.time;
-    if (isBest) saveBest(record);
+    if (isBest) saveBest(g.difficulty, record);
 
     const stats = el('div', 'stats');
     for (const [value, label] of [[formatTime(g.time), 'survived'], [String(g.kills), 'kills'], [String(g.level), 'level']]) {
@@ -248,10 +293,12 @@ export class UI {
 
     this.open(
       el('h2', 'danger', VOCAB.over),
+      el('p', 'sub', `Difficulty: ${g.difficulty.name}`),
       isBest ? el('div', 'new-best', 'New best time!') : null,
       stats,
       entries.length ? list : null,
       this.button('JACK IN AGAIN', onRestart, true),
+      this.button('Main menu', onMenu),
     );
   }
 }

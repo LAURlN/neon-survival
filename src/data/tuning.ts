@@ -57,6 +57,25 @@ export const GAME = {
   chillSlow: 0.5,
 };
 
+export interface Difficulty {
+  id: string;
+  name: string;
+  /** Multiplier on every hostile's starting HP. */
+  hp: number;
+  /** Multiplier on how fast hostile HP grows over the run. */
+  growth: number;
+  color: string;
+}
+
+/** Selectable on the main menu. The first entry is the baseline everything else is tuned against. */
+export const DIFFICULTIES: Difficulty[] = [
+  { id: 'easy', name: 'Easy', hp: 1, growth: 1, color: '#3dffb0' },
+  { id: 'medium', name: 'Medium', hp: 1.6, growth: 1.6, color: '#5ff4ff' },
+  { id: 'hard', name: 'Hard', hp: 2.5, growth: 2.4, color: '#ffd23c' },
+  { id: 'extreme', name: 'Extreme', hp: 4, growth: 3.5, color: '#ff7a3c' },
+  { id: 'asian', name: 'Asian', hp: 7, growth: 5.5, color: '#ff2e4d' },
+];
+
 /** Enemy spawn timeline. `ids` are enemy ids from game-data.json. */
 export interface Wave {
   /** Starts at this minute. */

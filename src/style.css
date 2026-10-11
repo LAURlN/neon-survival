@@ -476,6 +476,30 @@ h2.danger {
   text-shadow: 0 0 10px rgba(255, 210, 60, 0.7);
 }
 
+.difficulty {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.diff {
+  font: 700 11px var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 12px 0;
+  color: var(--c);
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--c) 45%, var(--line));
+  cursor: pointer;
+}
+
+.diff.on {
+  color: #04121a;
+  background: var(--c);
+  border-color: var(--c);
+  box-shadow: 0 0 14px -2px var(--c);
+}
+
 /* ---- circuit editor ----------------------------------------------------- */
 
 #editor {
@@ -498,6 +522,77 @@ h2.danger {
 .ed-done {
   padding: 8px 18px;
   font-size: 13px;
+}
+
+.ed-tools {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ed-tool {
+  font: 700 11px var(--mono);
+  padding: 9px 0;
+  color: var(--cyan);
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.ed-tool.on {
+  color: #04121a;
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.ed-tool:disabled {
+  color: var(--line);
+}
+
+/* Loadout list, floating over the board. */
+.ed-panel {
+  position: absolute;
+  inset: 12% 14px auto;
+  max-height: 70%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+.ed-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.ed-row span,
+.ed-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.ed-name {
+  font: 13px var(--mono);
+  color: var(--text);
+  background: #05060c;
+  border: 1px solid var(--line);
+  padding: 9px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.ed-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dim);
 }
 
 #editor canvas {

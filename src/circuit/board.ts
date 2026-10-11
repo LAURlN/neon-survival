@@ -51,6 +51,14 @@ export interface Tile {
   lastEnergy: number;
 }
 
+/** A tile and where it sits, as plain data. */
+export interface TileSpot {
+  id: string;
+  x: number;
+  y: number;
+  rot: number;
+}
+
 export const cellKey = (x: number, y: number) => `${x},${y}`;
 
 export class Board {
@@ -133,6 +141,21 @@ export class Board {
     t.rot = (t.rot + 1) % (t.def.turn === 'dir' ? 4 : 2);
     this.version++;
     return true;
+  }
+
+  /** Every placed tile as plain data (for clipboards and saved loadouts). */
+  layout(): TileSpot[] {
+    return [...this.tiles.values()].map((t) => ({ id: t.def.id, x: t.x, y: t.y, rot: t.rot }));
+  }
+
+  /**
+   * Place as many of `spots` as the inventory and free cells allow, shifted by (dx, dy).
+   * Returns how many went down; the rest stay unplaced.
+   */
+  placeAll(spots: readonly TileSpot[], dx = 0, dy = 0): number {
+    let placed = 0;
+    for (const s of spots) if (TILES[s.id] && this.place(s.x + dx, s.y + dy, s.id, s.rot)) placed++;
+    return placed;
   }
 
   /** Make this board's layout match `src`, keeping the state of every tile that did not change. */

@@ -5,7 +5,7 @@
  */
 import { Board } from '../circuit/board';
 import { fireWeapon } from '../circuit/weapons';
-import { GAME } from '../data/tuning';
+import { DIFFICULTIES, GAME, type Difficulty } from '../data/tuning';
 import type { Sfx } from '../engine/audio';
 import { Grid } from '../engine/grid';
 import type { Input } from '../engine/input';
@@ -76,7 +76,7 @@ export class Game {
   private textBudget = 0;
   private sparkBudget = 0;
 
-  constructor(readonly input: Input) {
+  constructor(readonly input: Input, readonly difficulty: Difficulty = DIFFICULTIES[0]) {
     this.player = new Player(this);
     this.progression = new Progression(this);
     this.director = new Director(this);

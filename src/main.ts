@@ -5,7 +5,7 @@ import { Input } from './engine/input';
 import { Game } from './game/game';
 import { Renderer } from './render/renderer';
 import { BoardEditor } from './ui/editor';
-import { UI } from './ui/ui';
+import { UI, loadDifficulty } from './ui/ui';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const input = new Input(canvas);
@@ -15,6 +15,7 @@ const audio = new AudioEngine();
 const editor = new BoardEditor();
 
 let game: Game | null = null;
+let difficulty = loadDifficulty();
 /** True while the simulation should advance. */
 let running = false;
 let last = performance.now();
@@ -24,7 +25,7 @@ function start() {
   audio.unlock();
   audio.stopMusic();
   audio.startMusic();
-  game = new Game(input);
+  game = new Game(input, difficulty);
   game.sound = (name, power) => audio.play(name, power);
   ui.close();
   ui.showHud(true);
@@ -37,7 +38,10 @@ function toTitle() {
   running = false;
   game = null;
   ui.showHud(false);
-  ui.showTitle(start);
+  ui.showTitle(difficulty, (d) => {
+    difficulty = d;
+    start();
+  });
 }
 
 function pause() {
@@ -108,7 +112,7 @@ function frame(now: number) {
         running = false;
         audio.stopMusic();
         audio.play('over');
-        ui.showResult(game, start);
+        ui.showResult(game, start, toTitle);
       } else if (game.pendingLegendary > 0 || game.pendingChests > 0 || game.pendingLevelUps > 0) {
         void drainChoices(game);
       }

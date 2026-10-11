@@ -32,6 +32,7 @@ open the circuit and place them. `Esc` / `P` pauses, `♪` mutes.
 | Bosses | 4 attack patterns, one every 5 minutes, each drops a legendary cache | `src/game/boss.ts`, `BOSSES` in `tuning.ts` |
 | Weapons | 20 (4 shapes × 5 types) | `src/data/weapons.ts`, `src/circuit/weapons.ts` |
 | Elements | 4 | `src/circuit/weapons.ts` |
+| Difficulties | 5 (hostile starting HP and HP growth) | `DIFFICULTIES` in `tuning.ts` |
 | Stat upgrades / cyberware | 9 / 53 | `game-data.json`, filtered by `src/game/effects.ts` |
 | Enemies | 29 | `game-data.json` |
 
@@ -78,7 +79,7 @@ src/
   render/renderer.ts all world drawing (procedural, no image assets)
   ui/
     ui.ts            DOM HUD and overlay screens
-    editor.ts        the circuit editor
+    editor.ts        the circuit editor: placing, area select / cut / copy / paste, saved loadouts
 ```
 
 The board knows nothing about the game world: it reads `sense` and `rate`, and reports each emission
