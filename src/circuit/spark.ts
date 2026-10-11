@@ -6,6 +6,9 @@
  *   element - what a hit does on top of damage
  *   shape   - what the thing that hits looks like and how it connects
  *   mode    - (called "type" in the UI) where it appears and how it travels
+ *
+ * On top of that, tuning tiles can scale how big, long-lived and fast the
+ * resulting weapon is.
  */
 export type Element = 'none' | 'fire' | 'shock' | 'cryo' | 'acid';
 export type Shape = 'arrow' | 'beam' | 'seeker' | 'bomb';
@@ -31,6 +34,11 @@ export interface Spark {
   mode: Mode;
   /** Projectiles fired per emission. */
   count: number;
+  /** Tuning set by tiles: multipliers on area / hitbox, lifetime / range and travel speed, and extra targets pierced. */
+  size: number;
+  dur: number;
+  speed: number;
+  pierce: number;
   age: number;
   /** Ticks left to wait on the current tile (Buffer). */
   wait: number;
@@ -39,7 +47,8 @@ export interface Spark {
 }
 
 export const newSpark = (x: number, y: number, dx: number, dy: number, energy: number): Spark => ({
-  x, y, px: x, py: y, dx, dy, energy, element: 'none', shape: 'arrow', mode: 'aim', count: 1, age: 0, wait: 0,
+  x, y, px: x, py: y, dx, dy, energy, element: 'none', shape: 'arrow', mode: 'aim', count: 1, size: 1, dur: 1, speed: 1,
+  pierce: 0, age: 0, wait: 0,
   seen: new Map(),
 });
 

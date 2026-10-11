@@ -18,8 +18,8 @@ open the circuit and place them. `Esc` / `P` pauses, `♪` mutes.
 
 - **Reactors** throw sparks in a straight line, ten board cells per second. A spark flies until it enters a
   tile or leaves the board. The board has no edges.
-- Tiles change the spark: route it (mirror, splitter, gates), make it stronger (amplifier, capacitor), or
-  set one of its three properties.
+- Tiles change the spark: route it (mirror, splitter, gates), make it stronger (amplifier, capacitor), tune
+  the weapon it becomes (size, duration, speed, pierce), or set one of its three properties.
 - An **emitter** fires the spark. Its **shape** (arrow, beam, seeker, bomb) and **type** (aimed, loose,
   orbit, sky, lock) pick one of 20 weapons; its **element** (fire, shock, cryo, acid) adds an effect to
   every hit; its energy is the damage.
@@ -28,7 +28,7 @@ open the circuit and place them. `Esc` / `P` pauses, `♪` mutes.
 
 | | Count | Where |
 |---|---|---|
-| Tiles | 46 (26 basic, 14 special, 6 legendary) | `src/data/tiles.ts` |
+| Tiles | 54 (30 basic, 18 special, 6 legendary) | `src/data/tiles.ts` |
 | Bosses | 4 attack patterns, one every 5 minutes, each drops a legendary cache | `src/game/boss.ts`, `BOSSES` in `tuning.ts` |
 | Weapons | 20 (4 shapes × 5 types) | `src/data/weapons.ts`, `src/circuit/weapons.ts` |
 | Elements | 4 | `src/circuit/weapons.ts` |

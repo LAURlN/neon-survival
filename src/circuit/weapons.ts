@@ -23,9 +23,12 @@ interface Shot {
   /** Damage source key, "shape.mode". */
   src: string;
   color: string;
-  /** Global area and duration multipliers. */
+  /** Area and duration multipliers (the spark's tuning times the global stats). */
   size: number;
   dur: number;
+  /** The spark's travel speed multiplier and extra pierce. */
+  speed: number;
+  pierce: number;
   /** Visual scale: how this shot's energy compares to a basic reactor spark. */
   k: number;
   onHit?: (e: Enemy) => void;
@@ -99,9 +102,21 @@ function nearestN(c: Shot, n: number): Enemy[] {
   return [...skip];
 }
 
+/** Spawn a projectile with the spark's size, duration, speed and pierce applied to it. */
+function launch(c: Shot, p: Parameters<Game['spawnProjectile']>[0]): Projectile {
+  const pr = c.g.spawnProjectile(p);
+  pr.r *= c.size;
+  pr.life *= c.dur;
+  pr.vx *= c.speed;
+  pr.vy *= c.speed;
+  // Carriers that only exist to explode keep stopping at the first thing they touch.
+  if (pr.dmg > 0) pr.pierce += c.pierce;
+  return pr;
+}
+
 function bolt(c: Shot, angle: number, speed: number, extra: Partial<Projectile> = {}): Projectile {
   const p = c.g.player;
-  return c.g.spawnProjectile({ x: p.x, y: p.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, dmg: c.dmg,
+  return launch(c, { x: p.x, y: p.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, dmg: c.dmg,
                                src: c.src, color: c.color, scale: c.k, onHit: c.onHit, ...extra });
 }
 
@@ -111,7 +126,7 @@ function orbiter(c: Shot, i: number, radius: number, life: number, extra: Partia
   let a = spin(c) + (i / c.n) * TAU;
   let free = false;
   const p = c.g.player;
-  return c.g.spawnProjectile({
+  return launch(c, {
     x: p.x + Math.cos(a) * radius, y: p.y + Math.sin(a) * radius, vx: 0, vy: 0, dmg: c.dmg, src: c.src,
     color: c.color, life, style: 'orb', scale: c.k, onHit: c.onHit,
     update: (pr, dt, g) => {
@@ -142,7 +157,8 @@ const FIRE: Record<string, (c: Shot) => void> = {
   'beam.aim': (c) => each(c, (i) => {
     const p = c.g.player;
     const a = aim(c, i, 0.16);
-    c.g.strikeLine(p.x, p.y, p.x + Math.cos(a) * 520, p.y + Math.sin(a) * 520, 9, c.dmg, c.src, c.color, c.onHit, c.k);
+    const len = 520 * Math.min(2, c.dur);
+    c.g.strikeLine(p.x, p.y, p.x + Math.cos(a) * len, p.y + Math.sin(a) * len, 9 * c.size, c.dmg, c.src, c.color, c.onHit, c.k);
   }),
   'seeker.aim': (c) => each(c, (i) => {
     const p = c.g.player;
@@ -173,31 +189,31 @@ const FIRE: Record<string, (c: Shot) => void> = {
   'bomb.loose': (c) => each(c, (i) => {
     const p = c.g.player;
     const off = i ? 28 : 0;
-    c.g.spawnProjectile({ x: p.x + rand(-off, off), y: p.y + rand(-off, off), vx: 0, vy: 0, dmg: 0, src: c.src,
+    launch(c, { x: p.x + rand(-off, off), y: p.y + rand(-off, off), vx: 0, vy: 0, dmg: 0, src: c.src,
                           color: c.color, life: 9, r: 11, style: 'orb', scale: c.k, onEnd: (pr) => boom(c, pr.x, pr.y, 80) });
   }),
 
   // Orbit: circles the player.
-  'arrow.orbit': (c) => each(c, (i) => orbiter(c, i, 80, 4 * c.dur, { r: 9, rehit: 0.35, pierce: Infinity })),
+  'arrow.orbit': (c) => each(c, (i) => orbiter(c, i, 80, 4, { r: 9, rehit: 0.35, pierce: Infinity })),
   'beam.orbit': (c) => each(c, (i) => {
     const p = c.g.player;
     c.g.addZone({ x: p.x, y: p.y, r: 95 * c.size * (1 + 0.35 * i), life: 1.2 * c.dur, interval: 0.3, dmg: c.dmg,
                   src: c.src, color: c.color, style: 'ring', follow: true, scale: c.k, onHit: c.onHit });
   }),
   'seeker.orbit': (c) => each(c, (i) => {
-    orbiter(c, i, 58, 5 * c.dur, { r: 6, style: 'shard' }, (pr) => {
+    orbiter(c, i, 58, 5, { r: 6, style: 'shard' }, (pr) => {
       const e = c.g.nearest(pr.x, pr.y, 170);
       if (!e) return false;
       const a = Math.atan2(e.y - pr.y, e.x - pr.x);
-      pr.vx = Math.cos(a) * 440;
-      pr.vy = Math.sin(a) * 440;
+      pr.vx = Math.cos(a) * 440 * c.speed;
+      pr.vy = Math.sin(a) * 440 * c.speed;
       pr.homing = e;
       pr.life = Math.min(pr.life, 2);
       return true;
     });
   }),
   'bomb.orbit': (c) => each(c, (i) => {
-    orbiter(c, i, 66, 5 * c.dur, { dmg: 0, r: 10, onHit: undefined, onEnd: (pr) => boom(c, pr.x, pr.y, 68) });
+    orbiter(c, i, 66, 5, { dmg: 0, r: 10, onHit: undefined, onEnd: (pr) => boom(c, pr.x, pr.y, 68) });
   }),
 
   // Sky: lands on a random spot.
@@ -225,7 +241,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
     const e = c.g.nearest(pt.x, pt.y, 500);
     const a = e ? Math.atan2(e.y - pt.y, e.x - pt.x) : rand(0, TAU);
     c.g.ring(pt.x, pt.y, 22, c.color, 0.25);
-    c.g.spawnProjectile({ x: pt.x, y: pt.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, dmg: c.dmg, src: c.src,
+    launch(c, { x: pt.x, y: pt.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, dmg: c.dmg, src: c.src,
                           color: c.color, homing: e, life: 2.5, r: 6, style: 'shard', scale: c.k, onHit: c.onHit });
   }),
   'bomb.sky': (c) => each(c, () => {
@@ -252,7 +268,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
       for (const a of [spin(c), spin(c) + Math.PI / 2]) {
         const dx = Math.cos(a) * len;
         const dy = Math.sin(a) * len;
-        c.g.strikeLine(e.x - dx, e.y - dy, e.x + dx, e.y + dy, 8, c.dmg, c.src, c.color, c.onHit, c.k);
+        c.g.strikeLine(e.x - dx, e.y - dy, e.x + dx, e.y + dy, 8 * Math.sqrt(c.size), c.dmg, c.src, c.color, c.onHit, c.k);
       }
     }
   },
@@ -267,7 +283,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
         c.g.hit(cur, c.dmg, c.src);
         c.onHit?.(cur);
         from = cur;
-        cur = c.g.nearest(cur.x, cur.y, 170, skip);
+        cur = c.g.nearest(cur.x, cur.y, 170 * c.size, skip);
       }
     }
   },
@@ -281,8 +297,8 @@ export function fireWeapon(g: Game, s: Spark) {
   const src = `${s.shape}.${s.mode}`;
   const dmg = ((s.energy * GAME.energyDamage) / 100) * g.atk * g.stats.mult('allDmg') * WEAPONS[s.shape][s.mode].power;
   FIRE[src]({
-    g, n: s.count, dmg, src, color: ELEMENT_COLOR[s.element], size: g.stats.mult('size', -80),
-    dur: g.stats.mult('dur', -80), k: clamp(Math.sqrt(s.energy / GAME.sparkEnergy), 0.7, 3), onHit: elementHook(g, s.element, dmg),
+    g, n: s.count, dmg, src, color: ELEMENT_COLOR[s.element], size: g.stats.mult('size', -80) * s.size,
+    dur: g.stats.mult('dur', -80) * s.dur, speed: s.speed, pierce: s.pierce, k: clamp(Math.sqrt(s.energy / GAME.sparkEnergy), 0.7, 3), onHit: elementHook(g, s.element, dmg),
   });
   g.sound(SFX[s.shape]);
 }

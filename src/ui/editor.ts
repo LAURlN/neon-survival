@@ -17,7 +17,7 @@ import type { Sfx } from '../engine/audio';
 import { TAU, clamp } from '../engine/math';
 
 const CAT_COLOR: Record<TileCat, string> = {
-  source: '#ffe93c', route: '#e6f1ff', boost: '#ff9a3c', logic: '#b48cff', element: '#ff7a3c', shape: '#ff2bd6',
+  source: '#ffe93c', route: '#e6f1ff', boost: '#ff9a3c', tune: '#7dd3ff', logic: '#b48cff', element: '#ff7a3c', shape: '#ff2bd6',
   mode: '#3dffea', emit: '#5ff4ff',
 };
 const FONT = "ui-monospace, 'Cascadia Mono', 'Roboto Mono', Consolas, monospace";
@@ -407,7 +407,7 @@ export class BoardEditor {
   /** A spark is drawn as its shape, in its element's colour, sized by its energy. */
   private drawSpark(sp: Spark, x: number, y: number, s: number) {
     const { ctx } = this;
-    const r = (3 + Math.sqrt(sp.energy) * 0.9) * (s / 58);
+    const r = (3 + Math.sqrt(sp.energy) * 0.9) * Math.sqrt(sp.size) * (s / 58);
     const color = ELEMENT_COLOR[sp.element];
     ctx.fillStyle = ctx.strokeStyle = color;
     ctx.globalAlpha = 0.28;

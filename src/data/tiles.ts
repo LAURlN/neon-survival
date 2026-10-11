@@ -11,9 +11,9 @@ import type { Element, Mode, Shape } from '../circuit/spark';
 
 export type TileOp =
   | 'source' | 'mirror' | 'split' | 'boost' | 'bank' | 'and' | 'join' | 'switch' | 'threshold'
-  | 'sense' | 'delay' | 'element' | 'shape' | 'mode' | 'count' | 'emit';
+  | 'sense' | 'delay' | 'element' | 'shape' | 'mode' | 'count' | 'tune' | 'emit';
 
-export type TileCat = 'source' | 'route' | 'boost' | 'logic' | 'element' | 'shape' | 'mode' | 'emit';
+export type TileCat = 'source' | 'route' | 'boost' | 'tune' | 'logic' | 'element' | 'shape' | 'mode' | 'emit';
 
 export interface TileDef {
   id: string;
@@ -41,6 +41,10 @@ export interface TileDef {
   mult?: number;
   /** split: outputs (2 = sideways, 3 = sideways + straight). bank: sparks banked. boost: boosts allowed per spark. */
   n?: number;
+  /** tune: which property of the spark it changes (by `mult`, or by `n` for pierce), once per spark. */
+  stat?: 'size' | 'dur' | 'speed' | 'pierce';
+  /** tune: energy multiplier paid or gained alongside. */
+  gain?: number;
   /** boost: chance (0-1) that the boost happens at all. */
   chance?: number;
   /** emit: fraction of the energy that carries on past the emitter. */
@@ -63,7 +67,7 @@ export const RARITY = [
 ];
 
 export const CAT_LABEL: Record<TileCat, string> = {
-  source: 'Source', route: 'Routing', boost: 'Boost', logic: 'Logic', element: 'Element', shape: 'Shape',
+  source: 'Source', route: 'Routing', boost: 'Boost', tune: 'Tuning', logic: 'Logic', element: 'Element', shape: 'Shape',
   mode: 'Type', emit: 'Emitter',
 };
 
@@ -84,6 +88,14 @@ const defs: TileDef[] = [
     desc: '×1.5 energy, once per spark. Needs 1 s to recharge.' },
   { id: 'bank', name: 'Capacitor', glyph: '▣', rarity: 0, cat: 'boost', op: 'bank', turn: 'dir', n: 3, mult: 1.25,
     desc: 'Banks 3 sparks and releases one with their energy ×1.25. The bonus applies once per spark.' },
+  { id: 'wide', name: 'Widener', glyph: '⬌', rarity: 1, cat: 'tune', op: 'tune', stat: 'size', mult: 1.25,
+    desc: 'SIZE ×1.25: bigger blasts, zones and beams, fatter shots. Once per spark.' },
+  { id: 'long', name: 'Sustainer', glyph: '⧖', rarity: 1, cat: 'tune', op: 'tune', stat: 'dur', mult: 1.3,
+    desc: 'DURATION ×1.3: orbiters, zones and mines last longer, shots fly further. Once per spark.' },
+  { id: 'fast', name: 'Accelerator', glyph: '»', rarity: 0, cat: 'tune', op: 'tune', stat: 'speed', mult: 1.35, weight: 0.7,
+    desc: 'SPEED ×1.35 for anything that flies. Once per spark.' },
+  { id: 'drill', name: 'Drill Tip', glyph: '⤐', rarity: 1, cat: 'tune', op: 'tune', stat: 'pierce', n: 1,
+    desc: 'PIERCE +1: shots pass through one more hostile (up to +3).' },
   { id: 'delay', name: 'Buffer', glyph: '◷', rarity: 0, cat: 'logic', op: 'delay', ticks: 3, bundle: 2, weight: 0.6,
     desc: 'Holds each spark for 0.3 s. Use it to line sparks up.' },
   { id: 'join', name: 'OR Gate', glyph: '⊕', rarity: 0, cat: 'logic', op: 'join', turn: 'dir', bundle: 2, weight: 0.8,
@@ -137,6 +149,14 @@ const defs: TileDef[] = [
     desc: '+1 projectile, each at 75% energy. A spark can carry at most 4 projectiles.' },
   { id: 'lens', name: 'Crit Lens', glyph: '◈', rarity: 2, cat: 'boost', op: 'boost', mult: 2.5, chance: 0.3, n: 1,
     desc: 'One roll per spark: 30% chance to multiply it by ×2.5. No recharge.' },
+  { id: 'magnifier', name: 'Magnifier', glyph: '⬌', rarity: 2, cat: 'tune', op: 'tune', stat: 'size', mult: 1.6,
+    desc: 'SIZE ×1.6. Once per spark.' },
+  { id: 'stasis', name: 'Stasis Coil', glyph: '⧖', rarity: 2, cat: 'tune', op: 'tune', stat: 'dur', mult: 1.8,
+    desc: 'DURATION ×1.8. Once per spark.' },
+  { id: 'compressor', name: 'Compressor', glyph: '⇲', rarity: 3, cat: 'tune', op: 'tune', stat: 'size', mult: 0.6, gain: 1.5,
+    desc: 'SIZE ×0.6, but energy ×1.5. Once per spark.' },
+  { id: 'diffuser', name: 'Diffuser', glyph: '⇱', rarity: 3, cat: 'tune', op: 'tune', stat: 'size', mult: 2, gain: 0.7,
+    desc: 'SIZE ×2, but energy ×0.7. Once per spark.' },
   { id: 'quick', name: 'Pulse Reactor', glyph: '⚡', rarity: 2, cat: 'source', op: 'source', turn: 'dir', energy: 6, ticks: 3,
     trigger: 'clock', desc: 'Throws a 6-energy spark every 0.3 s.' },
   { id: 'pain', name: 'Pain Tap', glyph: '♥', rarity: 2, cat: 'source', op: 'source', turn: 'dir', energy: 70, ticks: 5,

@@ -24,6 +24,9 @@ const TICK = 1 / TICKS_PER_SEC;
 /** How long an AND gate waits for the second spark, in ticks. */
 const AND_WINDOW = 4;
 const MAX_SPARKS = 300;
+/** How far tuning tiles can push a spark's size / duration / speed multipliers and its pierce. */
+const TUNE_MIN = 0.4;
+const TUNE_MAX = { size: 3, dur: 3, speed: 2.5, pierce: 3 };
 
 export interface Tile {
   def: TileDef;
@@ -311,6 +314,14 @@ export class Board {
         break;
       case 'mode':
         s.mode = d.mode ?? 'aim';
+        break;
+      case 'tune':
+        if (!s.seen.has(t.key) && d.stat) {
+          s.seen.set(t.key, 1);
+          if (d.stat === 'pierce') s.pierce = Math.min(TUNE_MAX.pierce, s.pierce + (d.n ?? 1));
+          else s[d.stat] = Math.min(TUNE_MAX[d.stat], Math.max(TUNE_MIN, s[d.stat] * (d.mult ?? 1)));
+          s.energy *= d.gain ?? 1;
+        }
         break;
       case 'count':
         if (s.count < (d.n ?? 4)) {
