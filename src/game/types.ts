@@ -59,6 +59,8 @@ export interface Projectile {
   life: number;
   color: string;
   style: ProjectileStyle;
+  /** Drawn size multiplier (how much energy it carries); does not change what it hits. */
+  scale?: number;
   /** Enemies already hit (ignored when `rehit` is set). */
   hit: Set<Enemy>;
   /** If set, the same enemy can be hit again after this many seconds. */
@@ -93,6 +95,8 @@ export interface Zone {
   src: string;
   color: string;
   style: ZoneStyle;
+  /** Drawn intensity multiplier; does not change what it hits. */
+  scale?: number;
   /** Stays centred on the player. */
   follow?: boolean;
   vx: number;
@@ -120,6 +124,8 @@ export interface Beam {
   color: string;
   /** Radians per second. */
   spin: number;
+  /** Drawn width multiplier; does not change what it hits. */
+  scale?: number;
   onHit?(e: Enemy): void;
   dead: boolean;
 }

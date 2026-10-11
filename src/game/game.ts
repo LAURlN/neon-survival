@@ -22,6 +22,8 @@ export interface ExplodeOpts {
   knockback?: number;
   /** Skip the default ring / burst visuals. */
   quiet?: boolean;
+  /** How hard it hits relative to a plain shot (1 = normal); only changes how it looks and sounds. */
+  power?: number;
   /** Called for every enemy caught in the blast, after the damage. */
   onHit?: (e: Enemy) => void;
 }
@@ -325,10 +327,14 @@ export class Game {
   /** Instant area damage. */
   explode(x: number, y: number, r: number, dmg: number, src: string, color: string, opts: ExplodeOpts = {}) {
     if (!opts.quiet) {
+      const power = opts.power ?? 1;
       this.ring(x, y, r, color, 0.3);
       this.burst(x, y, r * 0.8, color, 0.22);
-      this.sparks(x, y, color, Math.min(10, 3 + r / 20), 60 + r * 3);
-      this.sound('boom', r / 70);
+      // A white-hot core that grows with the energy behind the blast.
+      this.burst(x, y, r * 0.3 * power, '#ffffff', 0.12 + 0.08 * power);
+      this.sparks(x, y, color, Math.min(16, (3 + r / 20) * power), 60 + r * 3);
+      this.sound('boom', (r / 70) * power);
+      if (power > 1.8) this.shake = Math.max(this.shake, power * 1.5);
     }
     this.grid.query(x, y, r, (e) => {
       if (e.dead) return;
@@ -343,10 +349,10 @@ export class Game {
     });
   }
 
-  /** Instant damage to everything within `width` of a line, drawn as a flash of light. */
+  /** Instant damage to everything within `width` of a line, drawn as a flash of light `scale` times as thick. */
   strikeLine(x1: number, y1: number, x2: number, y2: number, width: number, dmg: number, src: string, color: string,
-             onHit?: (e: Enemy) => void) {
-    this.fx.push({ kind: 'lightning', x: x1, y: y1, r: width * 0.7, life: 0.2, maxLife: 0.2, color, pts: [x1, y1, x2, y2] });
+             onHit?: (e: Enemy) => void, scale = 1) {
+    this.fx.push({ kind: 'lightning', x: x1, y: y1, r: width * 0.7 * scale, life: 0.2, maxLife: 0.2, color, pts: [x1, y1, x2, y2] });
     for (const e of this.enemies) {
       if (e.dead || distToSegment2(e.x, e.y, x1, y1, x2, y2) > (width + e.r) ** 2) continue;
       this.hit(e, dmg, src);

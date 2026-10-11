@@ -421,34 +421,37 @@ export class Renderer {
     const sp = Math.hypot(p.vx, p.vy) || 1;
     const dx = p.vx / sp;
     const dy = p.vy / sp;
+    // Shots carrying more energy are drawn bigger.
+    const k = p.scale ?? 1;
+    const r = p.r * k;
     ctx.fillStyle = ctx.strokeStyle = p.color;
 
     switch (p.style) {
       case 'bolt':
       case 'spark':
       case 'shard': {
-        const len = p.style === 'spark' ? 10 : 22;
+        const len = (p.style === 'spark' ? 10 : 22) * k;
         ctx.lineCap = 'round';
         ctx.globalAlpha = 0.35;
-        ctx.lineWidth = p.r * 2.2;
+        ctx.lineWidth = r * 2.2;
         ctx.beginPath();
         ctx.moveTo(p.x - dx * len, p.y - dy * len);
         ctx.lineTo(p.x, p.y);
         ctx.stroke();
         ctx.globalAlpha = 1;
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(1.5, p.r * 0.6);
+        ctx.lineWidth = Math.max(1.5, r * 0.6);
         ctx.beginPath();
         ctx.moveTo(p.x - dx * len * 0.5, p.y - dy * len * 0.5);
         ctx.lineTo(p.x, p.y);
         ctx.stroke();
         ctx.lineCap = 'butt';
-        this.glow(p.x, p.y, p.r * 3.5, p.color, 0.8);
+        this.glow(p.x, p.y, r * 3.5, p.color, 0.8);
         break;
       }
       case 'flame':
-        this.glow(p.x, p.y, p.r * (3.4 - p.life * 2.5), p.color, clamp(p.life * 2.4, 0, 0.8));
-        this.glow(p.x, p.y, p.r * 1.2, '#fff2c0', clamp(p.life * 2, 0, 0.6));
+        this.glow(p.x, p.y, r * (3.4 - p.life * 2.5), p.color, clamp(p.life * 2.4, 0, 0.8));
+        this.glow(p.x, p.y, r * 1.2, '#fff2c0', clamp(p.life * 2, 0, 0.6));
         break;
       case 'wave': {
         const hw = p.halfWidth ?? 60;
@@ -468,17 +471,18 @@ export class Renderer {
         break;
       }
       default:
-        this.glow(p.x, p.y, p.r * 3.2, p.color, 0.9);
+        this.glow(p.x, p.y, r * 3.2, p.color, 0.9);
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * 0.55, 0, TAU);
+        ctx.arc(p.x, p.y, r * 0.55, 0, TAU);
         ctx.fill();
     }
   }
 
   private drawZone(z: Zone, time: number) {
     const { ctx } = this;
-    const fade = clamp(z.life * 3, 0, 1) * clamp((z.maxLife - z.life) * 6, 0.3, 1);
+    const k = z.scale ?? 1;
+    const fade = clamp(z.life * 3, 0, 1) * clamp((z.maxLife - z.life) * 6, 0.3, 1) * clamp(0.55 + 0.45 * k, 0.6, 1.5);
     ctx.strokeStyle = z.color;
     if (z.style === 'tornado') {
       this.glow(z.x, z.y, z.r * 1.3, z.color, fade * 0.3);
@@ -495,8 +499,8 @@ export class Renderer {
       ctx.lineCap = 'butt';
     } else {
       this.glow(z.x, z.y, z.r * 1.25, z.color, fade * (z.style === 'field' ? 0.25 : 0.42));
-      ctx.globalAlpha = fade * 0.9;
-      ctx.lineWidth = 2;
+      ctx.globalAlpha = Math.min(1, fade * 0.9);
+      ctx.lineWidth = 2 * k;
       ctx.beginPath();
       ctx.arc(z.x, z.y, z.r, 0, TAU);
       ctx.stroke();
@@ -520,7 +524,8 @@ export class Renderer {
       const flicker = 0.85 + Math.random() * 0.15;
       const ex = b.x + Math.cos(b.angle) * b.len;
       const ey = b.y + Math.sin(b.angle) * b.len;
-      for (const [alpha, width, color] of [[0.18, b.width * 3.4, b.color], [0.5, b.width * 1.5, b.color], [1, b.width * 0.45, '#ffffff']] as const) {
+      const bw = b.width * (b.scale ?? 1);
+      for (const [alpha, width, color] of [[0.18, bw * 3.4, b.color], [0.5, bw * 1.5, b.color], [1, bw * 0.45, '#ffffff']] as const) {
         ctx.strokeStyle = color;
         ctx.globalAlpha = alpha * fade * flicker;
         ctx.lineWidth = width;

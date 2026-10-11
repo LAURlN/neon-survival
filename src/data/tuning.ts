@@ -16,6 +16,8 @@ export const GAME = {
   baseAtk: 100,
   /** Damage per point of spark energy, as a percentage of ATK (10 energy = 1.3x ATK). */
   energyDamage: 13,
+  /** The spark energy that is drawn at normal size; stronger shots look bigger, weaker ones smaller. */
+  sparkEnergy: 10,
   baseCrit: 3,
   baseCritMult: 150,
   pickupRange: 95,

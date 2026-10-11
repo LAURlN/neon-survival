@@ -8,7 +8,7 @@
 import { GAME } from '../data/tuning';
 import { WEAPONS } from '../data/weapons';
 import type { Sfx } from '../engine/audio';
-import { TAU, chance, rand } from '../engine/math';
+import { TAU, chance, clamp, rand } from '../engine/math';
 import type { Game } from '../game/game';
 import type { Enemy, Projectile } from '../game/types';
 import { ELEMENT_COLOR, type Element, type Shape, type Spark } from './spark';
@@ -26,6 +26,8 @@ interface Shot {
   /** Global area and duration multipliers. */
   size: number;
   dur: number;
+  /** Visual scale: how this shot's energy compares to a basic reactor spark. */
+  k: number;
   onHit?: (e: Enemy) => void;
 }
 
@@ -100,7 +102,7 @@ function nearestN(c: Shot, n: number): Enemy[] {
 function bolt(c: Shot, angle: number, speed: number, extra: Partial<Projectile> = {}): Projectile {
   const p = c.g.player;
   return c.g.spawnProjectile({ x: p.x, y: p.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, dmg: c.dmg,
-                               src: c.src, color: c.color, onHit: c.onHit, ...extra });
+                               src: c.src, color: c.color, scale: c.k, onHit: c.onHit, ...extra });
 }
 
 /** A projectile that circles the player. `tick` may take over (return true) to stop the orbiting. */
@@ -111,7 +113,7 @@ function orbiter(c: Shot, i: number, radius: number, life: number, extra: Partia
   const p = c.g.player;
   return c.g.spawnProjectile({
     x: p.x + Math.cos(a) * radius, y: p.y + Math.sin(a) * radius, vx: 0, vy: 0, dmg: c.dmg, src: c.src,
-    color: c.color, life, style: 'orb', onHit: c.onHit,
+    color: c.color, life, style: 'orb', scale: c.k, onHit: c.onHit,
     update: (pr, dt, g) => {
       if (free) return;
       a += 4.2 * dt;
@@ -125,7 +127,7 @@ function orbiter(c: Shot, i: number, radius: number, life: number, extra: Partia
 
 /** Explosion carrying the shot's element. */
 function boom(c: Shot, x: number, y: number, r: number, knockback = 0) {
-  c.g.explode(x, y, r * c.size, c.dmg, c.src, c.color, { knockback, onHit: c.onHit });
+  c.g.explode(x, y, r * c.size, c.dmg, c.src, c.color, { knockback, power: c.k, onHit: c.onHit });
 }
 
 function each(c: Shot, fn: (i: number) => void) {
@@ -140,7 +142,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
   'beam.aim': (c) => each(c, (i) => {
     const p = c.g.player;
     const a = aim(c, i, 0.16);
-    c.g.strikeLine(p.x, p.y, p.x + Math.cos(a) * 520, p.y + Math.sin(a) * 520, 9, c.dmg, c.src, c.color, c.onHit);
+    c.g.strikeLine(p.x, p.y, p.x + Math.cos(a) * 520, p.y + Math.sin(a) * 520, 9, c.dmg, c.src, c.color, c.onHit, c.k);
   }),
   'seeker.aim': (c) => each(c, (i) => {
     const p = c.g.player;
@@ -157,7 +159,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
   }),
   'beam.loose': (c) => each(c, (i) => {
     c.g.addBeam({ angle: spin(c) + (i * TAU) / c.n, life: 0.9 * c.dur, spin: 5, len: 300 * c.size, width: 8,
-                  interval: 0.15, dmg: c.dmg, src: c.src, color: c.color, onHit: c.onHit });
+                  interval: 0.15, dmg: c.dmg, src: c.src, color: c.color, scale: c.k, onHit: c.onHit });
   }),
   'seeker.loose': (c) => each(c, () => {
     for (let k = 0; k < 3; k++) {
@@ -172,7 +174,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
     const p = c.g.player;
     const off = i ? 28 : 0;
     c.g.spawnProjectile({ x: p.x + rand(-off, off), y: p.y + rand(-off, off), vx: 0, vy: 0, dmg: 0, src: c.src,
-                          color: c.color, life: 9, r: 11, style: 'orb', onEnd: (pr) => boom(c, pr.x, pr.y, 80) });
+                          color: c.color, life: 9, r: 11, style: 'orb', scale: c.k, onEnd: (pr) => boom(c, pr.x, pr.y, 80) });
   }),
 
   // Orbit: circles the player.
@@ -180,7 +182,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
   'beam.orbit': (c) => each(c, (i) => {
     const p = c.g.player;
     c.g.addZone({ x: p.x, y: p.y, r: 95 * c.size * (1 + 0.35 * i), life: 1.2 * c.dur, interval: 0.3, dmg: c.dmg,
-                  src: c.src, color: c.color, style: 'ring', follow: true, onHit: c.onHit });
+                  src: c.src, color: c.color, style: 'ring', follow: true, scale: c.k, onHit: c.onHit });
   }),
   'seeker.orbit': (c) => each(c, (i) => {
     orbiter(c, i, 58, 5 * c.dur, { r: 6, style: 'shard' }, (pr) => {
@@ -203,9 +205,10 @@ const FIRE: Record<string, (c: Shot) => void> = {
     for (let k = 0; k < 4; k++) {
       c.g.after(i * 0.03 + k * 0.06, () => {
         const pt = skyPoint(c);
-        c.g.lightning(pt.x + rand(-24, 24), pt.y - 220, pt.x, pt.y, c.color, 0.14, 2);
+        c.g.lightning(pt.x + rand(-24, 24), pt.y - 220, pt.x, pt.y, c.color, 0.14, 2 * c.k);
         c.g.ring(pt.x, pt.y, 30 * c.size, c.color, 0.2);
         c.g.explode(pt.x, pt.y, 30 * c.size, c.dmg, c.src, c.color, { quiet: true, onHit: c.onHit });
+        c.g.burst(pt.x, pt.y, 14 * c.k, '#ffffff', 0.15);
       });
     }
   }),
@@ -214,7 +217,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
     c.g.mark(pt.x, pt.y, 50 * c.size, c.color, 0.35);
     c.g.after(0.35, () => {
       c.g.addZone({ x: pt.x, y: pt.y, r: 50 * c.size, life: 1.2 * c.dur, interval: 0.2, dmg: c.dmg, src: c.src,
-                    color: c.color, style: 'pool', onHit: c.onHit });
+                    color: c.color, style: 'pool', scale: c.k, onHit: c.onHit });
     });
   }),
   'seeker.sky': (c) => each(c, () => {
@@ -223,7 +226,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
     const a = e ? Math.atan2(e.y - pt.y, e.x - pt.x) : rand(0, TAU);
     c.g.ring(pt.x, pt.y, 22, c.color, 0.25);
     c.g.spawnProjectile({ x: pt.x, y: pt.y, vx: Math.cos(a) * 420, vy: Math.sin(a) * 420, dmg: c.dmg, src: c.src,
-                          color: c.color, homing: e, life: 2.5, r: 6, style: 'shard', onHit: c.onHit });
+                          color: c.color, homing: e, life: 2.5, r: 6, style: 'shard', scale: c.k, onHit: c.onHit });
   }),
   'bomb.sky': (c) => each(c, () => {
     const pt = skyPoint(c);
@@ -238,7 +241,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
   'arrow.lock': (c) => {
     const p = c.g.player;
     for (const e of nearestN(c, c.n)) {
-      c.g.lightning(p.x, p.y, e.x, e.y, c.color, 0.12, 2);
+      c.g.lightning(p.x, p.y, e.x, e.y, c.color, 0.12, 2 * c.k);
       c.g.hit(e, c.dmg, c.src);
       c.onHit?.(e);
     }
@@ -249,7 +252,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
       for (const a of [spin(c), spin(c) + Math.PI / 2]) {
         const dx = Math.cos(a) * len;
         const dy = Math.sin(a) * len;
-        c.g.strikeLine(e.x - dx, e.y - dy, e.x + dx, e.y + dy, 8, c.dmg, c.src, c.color, c.onHit);
+        c.g.strikeLine(e.x - dx, e.y - dy, e.x + dx, e.y + dy, 8, c.dmg, c.src, c.color, c.onHit, c.k);
       }
     }
   },
@@ -260,7 +263,7 @@ const FIRE: Record<string, (c: Shot) => void> = {
       let cur: Enemy | null = first;
       for (let hop = 0; hop < 3 && cur; hop++) {
         skip.add(cur);
-        c.g.lightning(from.x, from.y, cur.x, cur.y, c.color, 0.16, 2.5);
+        c.g.lightning(from.x, from.y, cur.x, cur.y, c.color, 0.16, 2.5 * c.k);
         c.g.hit(cur, c.dmg, c.src);
         c.onHit?.(cur);
         from = cur;
@@ -279,7 +282,7 @@ export function fireWeapon(g: Game, s: Spark) {
   const dmg = ((s.energy * GAME.energyDamage) / 100) * g.atk * g.stats.mult('allDmg') * WEAPONS[s.shape][s.mode].power;
   FIRE[src]({
     g, n: s.count, dmg, src, color: ELEMENT_COLOR[s.element], size: g.stats.mult('size', -80),
-    dur: g.stats.mult('dur', -80), onHit: elementHook(g, s.element, dmg),
+    dur: g.stats.mult('dur', -80), k: clamp(Math.sqrt(s.energy / GAME.sparkEnergy), 0.7, 3), onHit: elementHook(g, s.element, dmg),
   });
   g.sound(SFX[s.shape]);
 }
