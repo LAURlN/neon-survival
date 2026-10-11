@@ -41,6 +41,18 @@ export const GAME = {
   /** Kill counts at which a treasure chest drops; after the list, every `chestEvery` kills. */
   chestKills: [40, 130, 280, 480, 720],
   chestEvery: 320,
+  /**
+   * Things that turn up on their own, kills or not. Shards appear in small
+   * clusters on and around the screen; a cache appears just off screen, roughly
+   * in the direction the player is heading.
+   */
+  wildShardEvery: 3,
+  wildShardCluster: 3,
+  /** Value of one wild shard at the start, and how much it gains per minute (as a fraction). */
+  wildShardValue: 2,
+  wildShardGrowth: 0.3,
+  wildChestFirst: 50,
+  wildChestEvery: 80,
   /** Life orb drop chance per kill (%), and how much max HP it restores (%). */
   lifeOrbChance: 0.9,
   lifeOrbHeal: 20,

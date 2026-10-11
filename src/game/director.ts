@@ -11,6 +11,8 @@ export class Director {
   private timer = 1.5;
   private wave: Wave = WAVES[0];
   private bossesSpawned = 0;
+  private shardTimer = 1;
+  private chestTimer = GAME.wildChestFirst;
   /** Shown by the HUD for a few seconds when a boss arrives. */
   announce = { text: '', t: 0 };
 
@@ -20,6 +22,8 @@ export class Director {
     const g = this.g;
     const minute = g.time / 60;
     this.announce.t -= dt;
+
+    this.scatter(dt, minute);
 
     // Advance to the latest wave whose start time has passed.
     let current = WAVES[0];
@@ -50,6 +54,27 @@ export class Director {
         if (g.enemies.length >= GAME.maxEnemies) break;
         this.spawn(pick(this.wave.ids), 'normal');
       }
+    }
+  }
+
+  /** Shards and caches that appear without anything being killed. */
+  private scatter(dt: number, minute: number) {
+    const g = this.g;
+    const p = g.player;
+    if ((this.shardTimer -= dt) <= 0) {
+      this.shardTimer += GAME.wildShardEvery;
+      const a = rand(0, TAU);
+      const d = g.viewR * rand(0.45, 1.1);
+      const value = GAME.wildShardValue * (1 + GAME.wildShardGrowth * minute);
+      for (let i = 0; i < GAME.wildShardCluster; i++) {
+        g.drop('mana', p.x + Math.cos(a) * d + rand(-26, 26), p.y + Math.sin(a) * d + rand(-26, 26), value);
+      }
+    }
+    if ((this.chestTimer -= dt) <= 0) {
+      this.chestTimer += GAME.wildChestEvery;
+      const a = Math.atan2(p.mvy, p.mvx) + rand(-1.1, 1.1);
+      const d = g.viewR + rand(40, 160);
+      g.drop('chest', p.x + Math.cos(a) * d, p.y + Math.sin(a) * d, 1);
     }
   }
 

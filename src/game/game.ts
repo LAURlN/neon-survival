@@ -567,10 +567,16 @@ export class Game {
     const p = this.player;
     const range = GAME.pickupRange * this.stats.mult('pickup');
     const range2 = range * range;
+    const farShard = (this.viewR * 3) ** 2;
     for (const it of this.pickups) {
       if (it.dead) continue;
       it.age += dt;
       const d2 = dist2(p.x, p.y, it.x, it.y);
+      // Shards left far behind are forgotten, so wandering does not pile them up.
+      if (it.kind === 'mana' && d2 > farShard) {
+        it.dead = true;
+        continue;
+      }
       if (!it.pulled && d2 < range2 && it.kind !== 'chest' && it.kind !== 'legend') it.pulled = true;
       if (it.pulled) {
         // A short hop away from the player, then a smooth accelerating dive in.
