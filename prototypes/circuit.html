@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CIRCUIT</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  #board { border: 1px solid var(--line); cursor: pointer; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Concept 2 — CIRCUIT: route energy. Reactors throw pulses across a board;
+// whatever a pulse passes through changes it, and the emitter it lands in
+// turns it into an attack.
+const BW = 9, BH = 7, S = 66, TICK = 0.1, PERIOD = 6, DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+const T = {
+  src:   { name: 'REACTOR', g: '⚡', col: '#ffe93c', dir: true, desc: 'Throws a 10-energy pulse every 0.6 s' },
+  mir:   { name: 'MIRROR', g: '', col: '#e6f1ff', desc: 'Bounces pulses 90°. Click to flip' },
+  spl:   { name: 'SPLITTER', g: '◁▷', col: '#3dffea', desc: 'Two pulses out sideways, 60% each' },
+  amp:   { name: 'AMPLIFIER', g: '✚', col: '#ff9a3c', desc: '×1.6, once per pulse. Recharges 1 s' },
+  cap:   { name: 'CAPACITOR', g: '▣', col: '#b48cff', dir: true, desc: 'Banks 3 pulses, releases one at ×1.25' },
+  fire:  { name: 'IGNITER', g: '🔥', col: '#ff6a3c', desc: 'Pulse explodes on impact' },
+  shock: { name: 'ARC COIL', g: 'ϟ', col: '#ffe93c', desc: 'Pulse chains to 2 more targets' },
+  frost: { name: 'CRYO', g: '❄', col: '#7fd0ff', desc: 'Pulse slows what it hits' },
+  gun:   { name: 'BLASTER', g: '▲', col: '#5ff4ff', emit: true, desc: 'EMITTER: one shot, damage = energy' },
+  scat:  { name: 'SCATTER', g: '⁂', col: '#5ff4ff', emit: true, desc: 'EMITTER: 5 pellets at 35% each' },
+  nova:  { name: 'NOVA', g: '◯', col: '#5ff4ff', emit: true, desc: 'EMITTER: shockwave around you' },
+};
+
+const ui = mountShell({
+  title: 'CIRCUIT', tag: 'Concept 2 — route the energy', color: '#ffe93c', onLevel: () => refresh(),
+  rules: `<ul>
+    <li><b>Left-click</b> an empty cell to place the selected tile. <b>Click a tile</b> to rotate / flip it. <b>Right-click</b> removes it.</li>
+    <li>Reactors throw <b>pulses</b> in a straight line. A pulse flies until it hits a tile or leaves the board (wasted).</li>
+    <li>Tiles it passes through change it; an <b>emitter</b> swallows it and attacks with its energy and effects.</li>
+    <li>An amplifier only boosts each pulse once and needs a second to recharge — so feed it <b>fewer, fatter</b> pulses (capacitor first).</li>
+    <li>Effects (fire / arc / cryo) scale with the pulse's energy, so <b>order matters</b>.</li>
+  </ul>In a run: level-ups offer tiles; tile budget and reactor count grow with level.`,
+});
+const range = new Range(ui);
+const budget = () => 3 + 2 * ui.lvl.v, maxSrc = () => 1 + Math.floor((ui.lvl.v - 1) / 3);
+let board = [], pulses = [], tickN = 0, acc = 0;
+const at = (x, y) => (x >= 0 && y >= 0 && x < BW && y < BH ? board[y * BW + x] : undefined);
+const put = (x, y, type, rot = 0) => { board[y * BW + x] = { type, rot, x, y, ready: 0, store: [], flash: 0 }; };
+const count = (f) => board.filter((t) => t && (!f || f(t))).length;
+
+const PRESETS = {
+  Starter: [[1, 3, 'src', 1], [5, 3, 'gun']],
+  'Fat pulse': [[0, 3, 'src', 1], [2, 3, 'cap', 1], [4, 3, 'amp'], [5, 3, 'fire'], [7, 3, 'gun']],
+  Fork: [[0, 3, 'src', 1], [2, 3, 'amp'], [4, 3, 'spl'], [4, 0, 'mir', 0], [4, 6, 'mir', 1], [6, 0, 'shock'], [8, 0, 'scat'], [6, 6, 'frost'], [8, 6, 'nova']],
+};
+function preset(name) {
+  board = new Array(BW * BH).fill(null); pulses = [];
+  for (const [x, y, t, r] of PRESETS[name]) put(x, y, t, r || 0);
+  refresh();
+}
+
+function tick() {
+  tickN++;
+  for (const t of board) {
+    if (t && t.type === 'src' && tickN % PERIOD === 0) {
+      const [dx, dy] = DIRS[t.rot];
+      pulses.push({ x: t.x, y: t.y, px: t.x, py: t.y, dx, dy, E: 10, tags: new Set(), amps: new Set(), age: 0 });
+    }
+  }
+  const next = [];
+  for (const q of pulses) {
+    q.px = q.x; q.py = q.y; q.x += q.dx; q.y += q.dy;
+    const t = at(q.x, q.y);
+    if (t === undefined || ++q.age > 80 || q.E < 1) continue;
+    if (!t) { next.push(q); continue; }
+    t.flash = 1;
+    switch (t.type) {
+      case 'mir': [q.dx, q.dy] = t.rot ? [q.dy, q.dx] : [-q.dy, -q.dx]; next.push(q); break;
+      case 'spl':
+        for (const s of [1, -1]) next.push({ ...q, px: q.x, py: q.y, dx: -q.dy * s, dy: q.dx * s, E: q.E * 0.6, tags: new Set(q.tags), amps: new Set(q.amps) });
+        break;
+      case 'amp':
+        if (!q.amps.has(t) && tickN >= t.ready) { q.E *= 1.6; q.amps.add(t); t.ready = tickN + 10; }
+        next.push(q); break;
+      case 'cap':
+        t.store.push(q);
+        if (t.store.length >= 3) {
+          const [dx, dy] = DIRS[t.rot], m = { x: t.x, y: t.y, px: t.x, py: t.y, dx, dy, E: 0, tags: new Set(), amps: new Set(), age: 0 };
+          for (const s of t.store) { m.E += s.E * 1.25; s.tags.forEach((g) => m.tags.add(g)); s.amps.forEach((g) => m.amps.add(g)); }
+          t.store = []; next.push(m);
+        }
+        break;
+      case 'fire': case 'shock': case 'frost': q.tags.add(t.type); next.push(q); break;
+      case 'src': break;
+      default: emit(t, q);
+    }
+  }
+  pulses = next.slice(0, 200);
+}
+
+const tint = (tags) => (tags.has('fire') ? '#ff6a3c' : tags.has('shock') ? '#ffe93c' : tags.has('frost') ? '#7fd0ff' : '#5ff4ff');
+function onHit(E, tags) {
+  return (e) => {
+    if (tags.has('fire')) range.blast(e.x, e.y, 48, E * 0.5, '#ff6a3c');
+    if (tags.has('shock')) range.chain(e, 2, E * 0.5);
+    if (tags.has('frost')) e.slow = 2.5;
+  };
+}
+function emit(t, q) {
+  const p = range.p, { E, tags } = q, color = tint(tags);
+  t.last = E;
+  if (t.type === 'gun') range.shoot({ a: range.aim(p.x, p.y), dmg: E, r: 3 + Math.sqrt(E) * 0.45, color, onHit: onHit(E, tags) });
+  else if (t.type === 'scat') {
+    const a = range.aim(p.x, p.y);
+    for (let i = -2; i <= 2; i++) range.shoot({ a: a + i * 0.16, dmg: E * 0.35, r: 3, life: 0.7, color, onHit: onHit(E * 0.35, tags) });
+  } else {
+    const r = 60 + E * 1.3;
+    range.blast(p.x, p.y, r, E * 0.6, color);
+    if (tags.has('fire')) range.after(0.22, () => range.blast(range.p.x, range.p.y, r * 1.15, E * 0.4, '#ff6a3c'));
+    if (tags.has('frost')) for (const e of range.enemies) if (Math.hypot(e.x - p.x, e.y - p.y) < r) e.slow = 2.5;
+    const near = tags.has('shock') && range.nearest(p.x, p.y, r + 60);
+    if (near) { range.hurt(near, E * 0.5); range.chain(near, 3, E * 0.5); }
+  }
+}
+
+const pal = palette(T, 'mir');
+const cv = h('canvas', { id: 'board', width: BW * S, height: BH * S });
+const info = h('div', { class: 'info' });
+ui.left.style.width = BW * S + 'px';
+ui.left.append(h('div', { class: 'bar' }, 'LOAD', Object.keys(PRESETS).map((n) => h('button', { onclick: () => preset(n) }, n))), pal.el, cv, info);
+
+function cellOf(ev) {
+  const r = cv.getBoundingClientRect();
+  return [Math.floor((ev.clientX - r.left) / S), Math.floor((ev.clientY - r.top) / S)];
+}
+cv.onclick = (ev) => {
+  const [x, y] = cellOf(ev), t = at(x, y);
+  if (t) t.rot = t.type === 'mir' ? t.rot ^ 1 : T[t.type].dir ? (t.rot + 1) % 4 : t.rot;
+  else if (t === null && count() < budget() && (pal.cur !== 'src' || count((o) => o.type === 'src') < maxSrc())) put(x, y, pal.cur);
+  refresh();
+};
+cv.oncontextmenu = (ev) => { ev.preventDefault(); const [x, y] = cellOf(ev); if (at(x, y)) board[y * BW + x] = null; refresh(); };
+
+function refresh() {
+  const n = count(), s = count((t) => t.type === 'src'), e = count((t) => T[t.type].emit);
+  info.innerHTML = `TILES <b class="${n > budget() ? 'warn' : ''}">${n}/${budget()}</b> &nbsp; REACTORS <b class="${s > maxSrc() ? 'warn' : ''}">${s}/${maxSrc()}</b><br>` +
+    (!s ? '<span class="warn">No reactor — nothing is making energy.</span>' : !e ? '<span class="warn">No emitter — pulses have nowhere to go.</span>' : '');
+}
+
+function drawBoard(dt) {
+  const c = cv.getContext('2d'), k = acc / TICK;
+  c.fillStyle = '#080a14'; c.fillRect(0, 0, cv.width, cv.height);
+  c.strokeStyle = '#141b30'; c.lineWidth = 1; c.beginPath();
+  for (let x = 1; x < BW; x++) { c.moveTo(x * S, 0); c.lineTo(x * S, cv.height); }
+  for (let y = 1; y < BH; y++) { c.moveTo(0, y * S); c.lineTo(cv.width, y * S); }
+  c.stroke();
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (const t of board) {
+    if (!t) continue;
+    const D = T[t.type], cx = t.x * S + S / 2, cy = t.y * S + S / 2;
+    t.flash = Math.max(0, t.flash - dt * 4);
+    c.fillStyle = `rgba(255,255,255,${0.04 + t.flash * 0.22})`; c.strokeStyle = D.col; c.lineWidth = D.emit ? 3 : 1.5;
+    c.fillRect(cx - S / 2 + 5, cy - S / 2 + 5, S - 10, S - 10); c.strokeRect(cx - S / 2 + 5, cy - S / 2 + 5, S - 10, S - 10);
+    c.fillStyle = D.col;
+    if (t.type === 'mir') {
+      c.lineWidth = 4; c.beginPath();
+      c.moveTo(cx - 17, cy + (t.rot ? -17 : 17)); c.lineTo(cx + 17, cy + (t.rot ? 17 : -17)); c.stroke();
+    } else { c.font = '22px sans-serif'; c.fillText(D.g, cx, cy - 4); }
+    c.font = '9px monospace'; c.fillStyle = '#8291b5';
+    const sub = t.type === 'cap' ? `${t.store.length}/3` : t.type === 'amp' && tickN < t.ready ? 'charging' : D.emit && t.last ? t.last.toFixed(0) + ' dmg' : D.name;
+    c.fillText(sub, cx, cy + 18);
+    if (D.dir) {
+      const [dx, dy] = DIRS[t.rot];
+      c.save(); c.translate(cx + dx * (S / 2 - 6), cy + dy * (S / 2 - 6)); c.rotate(Math.atan2(dy, dx));
+      c.fillStyle = D.col; c.beginPath(); c.moveTo(6, 0); c.lineTo(-3, 6); c.lineTo(-3, -6); c.fill(); c.restore();
+    }
+  }
+  c.globalCompositeOperation = 'lighter';
+  for (const q of pulses) {
+    const x = (q.px + (q.x - q.px) * k) * S + S / 2, y = (q.py + (q.y - q.py) * k) * S + S / 2, r = 3 + Math.sqrt(q.E) * 1.1;
+    c.fillStyle = tint(q.tags);
+    c.globalAlpha = 0.3; c.beginPath(); c.arc(x, y, r * 2, 0, TAU); c.fill();
+    c.globalAlpha = 1; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+  }
+  c.globalCompositeOperation = 'source-over';
+  c.font = '10px monospace'; c.fillStyle = '#fff';
+  for (const q of pulses) c.fillText(q.E.toFixed(0), (q.px + (q.x - q.px) * k) * S + S / 2, (q.py + (q.y - q.py) * k) * S + S / 2 - 14);
+}
+
+range.onTick = (dt) => { acc += dt; while (acc >= TICK) { acc -= TICK; tick(); } };
+range.onFrame = drawBoard;
+preset('Starter');
+range.start();
+</script>
+</body>
+</html>

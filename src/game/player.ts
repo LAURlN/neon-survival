@@ -85,6 +85,7 @@ export class Player {
     this.invuln = GAME.hitInvuln;
     this.hurt = 0.25;
     g.sound('hurt');
+    g.board.trigger('hurt');
     g.sparks(this.x, this.y, '#ff2e4d', 8, 200);
     g.shake = Math.max(g.shake, 5);
 

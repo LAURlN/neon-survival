@@ -1,52 +1,48 @@
 /**
- * Everything the player owns (spells, passives, artifacts) and the logic that
- * builds level-up / chest choices. Every choice is an `Offer`; the UI just
- * shows them and calls `apply`.
+ * What the player is offered on a level-up or from a data cache, and what
+ * taking it does. Every choice is an `Offer`; the UI just shows them and
+ * calls `apply`.
+ *
+ *   level-up   -> basic circuit tiles, and sometimes a stat upgrade
+ *   data cache -> special circuit tiles, and a piece of cyberware
  */
 import { VOCAB } from '../data/theme';
+import { CAT_LABEL, RARITY, TILE_LIST, type TileDef } from '../data/tiles';
 import { GAME, GRADES } from '../data/tuning';
-import { pickWeighted, shuffle } from '../engine/math';
-import {
-  ARTIFACTS, PASSIVES, SPELL_BY_ID, SPELL_DEFS, describeEffects,
-  type ArtifactDef, type PassiveDef, type SpellDef, type TraitDef,
-} from './content';
+import { chance, pickWeighted, shuffle } from '../engine/math';
+import { ARTIFACTS, PASSIVES, describeEffects, type ArtifactDef, type PassiveDef } from './content';
 import type { Game } from './game';
-import { SPELL_CLASSES } from './spells';
-import type { Spell } from './spells/spell';
 import type { Effect } from './stats';
 
 export interface Offer {
   title: string;
-  /** Small line under the title: "New", "Lv 2 → 3", grade name... */
+  /** Small line under the title: "New", "Lv 2 → 3", rarity... */
   tag: string;
   lines: string[];
   color: string;
-  /** Applies the choice. May return follow-up offers (e.g. trait selection). */
+  /** Glyph for the card badge; defaults to the title's initials. */
+  icon?: string;
+  /** Applies the choice. May return follow-up offers. */
   apply(): Offer[] | void;
 }
 
+/** Take up to `n` different entries from `pool`, weighted. */
+function draw<T>(pool: T[], n: number, weight: (t: T) => number): T[] {
+  const rest = [...pool];
+  const out: T[] = [];
+  while (out.length < n && rest.length > 0) {
+    const chosen = pickWeighted(rest, weight);
+    rest.splice(rest.indexOf(chosen), 1);
+    out.push(chosen);
+  }
+  return out;
+}
+
 export class Progression {
-  readonly spells = new Map<number, Spell>();
   readonly passives = new Map<number, number>();
   readonly artifacts: ArtifactDef[] = [];
-  /** Listeners for mana orb pickups (Armageddon's Doom Prophet). */
-  readonly manaOrbHooks: (() => void)[] = [];
 
   constructor(private readonly g: Game) {}
-
-  onManaOrb() {
-    for (const fn of this.manaOrbHooks) fn();
-  }
-
-  // ---- applying upgrades ---------------------------------------------------
-
-  learnSpell(id: number): Spell {
-    const def = SPELL_BY_ID.get(id)!;
-    const spell = new SPELL_CLASSES[def.key](def, this.g);
-    this.spells.set(id, spell);
-    spell.onChange();
-    return spell;
-  }
 
   private applyEffects(effects: readonly Effect[]) {
     this.g.stats.applyAll(effects);
@@ -57,57 +53,17 @@ export class Progression {
         this.g.pendingLevelUps += value;
       }
     }
-    for (const s of this.spells.values()) s.onChange();
-  }
-
-  private levelUpSpell(spell: Spell, trait?: TraitDef) {
-    spell.level++;
-    if (trait) {
-      spell.traits.add(trait.id);
-      this.applyEffects(trait.effects);
-    } else {
-      this.applyEffects(spell.def.levels[spell.level - 2] ?? []);
-    }
   }
 
   // ---- building offers -----------------------------------------------------
 
-  private spellOffer(def: SpellDef): Offer {
-    const owned = this.spells.get(def.id);
-    if (!owned) {
-      return { title: def.name, tag: VOCAB.newSpell, lines: [def.desc], color: def.color,
-               apply: () => void this.learnSpell(def.id) };
-    }
-    const next = owned.level + 1;
-    const traitIndex = def.traitLevels.indexOf(next);
-    const group = traitIndex >= 0 ? def.traitGroups[traitIndex] : [];
-    if (group.length > 0) {
-      return {
-        title: def.name, tag: `Lv ${owned.level} → ${next}`, lines: [VOCAB.chooseTrait], color: def.color,
-        apply: () => group.map((t) => this.traitOffer(owned, t)),
-      };
-    }
-    const effects = def.levels[next - 2] ?? [];
-    const lines = describeEffects(effects);
-    return { title: def.name, tag: `Lv ${owned.level} → ${next}`, lines: lines.length ? lines : ['Level up'],
-             color: def.color, apply: () => this.levelUpSpell(owned) };
-  }
-
-  private traitOffer(spell: Spell, trait: TraitDef): Offer {
-    const lines = [...(trait.text ? [trait.text] : []), ...describeEffects(trait.effects)];
-    return { title: trait.name, tag: `${spell.def.name} ${VOCAB.trait}`, lines, color: spell.def.color,
-             apply: () => this.levelUpSpell(spell, trait) };
-  }
-
-  private overLevelOffer(spell: Spell): Offer {
-    const def = spell.def;
+  private tileOffer(def: TileDef): Offer {
+    const n = def.bundle ?? 1;
+    const rarity = RARITY[def.rarity];
     return {
-      title: def.name, tag: `Mastery +${spell.overLevel + 1}`, lines: describeEffects(def.overLevel),
-      color: def.color,
-      apply: () => {
-        spell.overLevel++;
-        this.applyEffects(def.overLevel);
-      },
+      title: n > 1 ? `${def.name} ×${n}` : def.name, tag: `${rarity.name} · ${CAT_LABEL[def.cat]} tile`,
+      lines: [def.desc], color: rarity.color, icon: def.glyph,
+      apply: () => this.g.board.give(def.id, n),
     };
   }
 
@@ -134,48 +90,24 @@ export class Progression {
     };
   }
 
-  private healOffer(): Offer {
-    return { title: 'Repair', tag: 'Nothing left to install', lines: ['Restore 30% HP'], color: '#7dff9a',
-             apply: () => this.g.player.heal(this.g.player.maxHp * 0.3) };
-  }
-
-  /** Choices for a level-up. */
+  /** Choices for a level-up: basic tiles, with a stat upgrade mixed in about half the time. */
   levelOffers(): Offer[] {
-    const pool: { offer: () => Offer; weight: number }[] = [];
-    const canLearn = this.spells.size < GAME.maxSpells;
-    for (const def of SPELL_DEFS) {
-      const owned = this.spells.get(def.id);
-      if (!owned) {
-        if (canLearn) pool.push({ offer: () => this.spellOffer(def), weight: 2 });
-      } else if (owned.level < def.maxLevel) {
-        pool.push({ offer: () => this.spellOffer(def), weight: 3 });
-      } else if (def.overLevel.length > 0) {
-        pool.push({ offer: () => this.overLevelOffer(owned), weight: 1 });
-      }
-    }
-    for (const def of PASSIVES) {
-      if ((this.passives.get(def.id) ?? 0) < def.maxLevel) pool.push({ offer: () => this.passiveOffer(def), weight: 2 });
-    }
-
-    const offers: Offer[] = [];
-    while (offers.length < GAME.choices && pool.length > 0) {
-      const chosen = pickWeighted(pool, (p) => p.weight);
-      pool.splice(pool.indexOf(chosen), 1);
-      offers.push(chosen.offer());
-    }
-    return offers.length ? offers : [this.healOffer()];
+    const basics = TILE_LIST.filter((t) => t.rarity <= 1);
+    const upgrades = PASSIVES.filter((p) => (this.passives.get(p.id) ?? 0) < p.maxLevel);
+    const withUpgrade = upgrades.length > 0 && chance(GAME.upgradeOfferChance);
+    // Uncommon tiles (elements, shapes, types, gates) turn up less often than plain building blocks.
+    const tiles = draw(basics, GAME.choices - (withUpgrade ? 1 : 0), (t) => (t.weight ?? 1) * (t.rarity ? 0.6 : 1));
+    const offers = tiles.map((t) => this.tileOffer(t));
+    if (withUpgrade) offers.push(this.passiveOffer(draw(upgrades, 1, () => 1)[0]));
+    return offers;
   }
 
-  /** Choices for a treasure chest. */
+  /** Choices for a data cache: special tiles, plus one piece of cyberware. */
   chestOffers(): Offer[] {
     const owned = new Set(this.artifacts.map((a) => a.id));
-    const pool = ARTIFACTS.filter((a) => !owned.has(a.id));
-    const offers: Offer[] = [];
-    while (offers.length < GAME.choices && pool.length > 0) {
-      const chosen = pickWeighted(pool, (a) => GRADES[a.grade].weight);
-      pool.splice(pool.indexOf(chosen), 1);
-      offers.push(this.artifactOffer(chosen));
-    }
-    return offers.length ? shuffle(offers) : [this.healOffer()];
+    const cyberware = draw(ARTIFACTS.filter((a) => !owned.has(a.id)), 1, (a) => GRADES[a.grade].weight);
+    const specials = TILE_LIST.filter((t) => t.rarity >= 2);
+    const tiles = draw(specials, GAME.choices - cyberware.length, (t) => RARITY[t.rarity].weight * (t.weight ?? 1));
+    return shuffle([...tiles.map((t) => this.tileOffer(t)), ...cyberware.map((a) => this.artifactOffer(a))]);
   }
 }

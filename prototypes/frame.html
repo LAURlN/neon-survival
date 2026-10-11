@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FRAME</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .grid { display: grid; grid-template-columns: repeat(7, 54px); gap: 3px; }
+  .cell { width: 54px; height: 54px; border: 1px solid #141b30; background: #080a14; display: grid; place-items: center; cursor: pointer; font-size: 22px; }
+  .cell.can { border-color: #2c4468; background: #0b1322; }
+  .cell.part { border-color: var(--k); background: color-mix(in srgb, var(--k) 14%, #080a14); color: var(--k); }
+  .cell.off { opacity: 0.3; }
+  .cell.blocked { border-color: var(--red); border-style: dashed; }
+  .cell span { display: block; line-height: 1; }
+  .front { color: var(--dim); letter-spacing: 0.3em; text-align: center; width: 396px; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Concept 1 — FRAME: the build is the body. Where a part sits and which way it
+// points decides what it can shoot, what it protects and how the ship handles.
+const N = 7, MID = 3, CS = 13, DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+const PARTS = {
+  core:  { name: 'CORE', g: '◆', col: '#ffffff', pw: -4, mass: 1, hidden: true },
+  gun:   { name: 'BLASTER', g: '▲', col: '#5ff4ff', pw: 1, mass: 1, dir: true, dmg: 12, cd: 0.42, desc: 'Fires the way it points. 1 power' },
+  tur:   { name: 'TURRET', g: '◎', col: '#3dffea', pw: 2, mass: 1, dmg: 7, cd: 0.5, desc: 'Aims itself, hits softer. 2 power' },
+  lance: { name: 'LANCE', g: '⇑', col: '#ff2bd6', pw: 3, mass: 1, dir: true, dmg: 34, cd: 1.5, desc: 'Piercing beam the way it points. 3 power' },
+  thr:   { name: 'THRUSTER', g: '▼', col: '#ffd23c', pw: 0, mass: 1, dir: true, desc: 'Speed and turning. Exhaust must be clear' },
+  rea:   { name: 'REACTOR', g: '⚡', col: '#ffe93c', pw: -3, mass: 1, desc: '+3 power. Touching weapons fire 25% faster' },
+  amp:   { name: 'AMPLIFIER', g: '✚', col: '#ff9a3c', pw: 1, mass: 1, desc: 'Touching weapons hit 40% harder. 1 power' },
+  arm:   { name: 'ARMOR', g: '▦', col: '#8291b5', pw: 0, mass: 2, desc: 'Shrugs off whatever touches it. Heavy' },
+  spk:   { name: 'BLADE', g: '✦', col: '#ff5a6e', pw: 0, mass: 1, desc: 'Hostiles touching it take 45 damage' },
+};
+
+const ui = mountShell({
+  title: 'FRAME', tag: 'Concept 1 — build the body', color: '#5ff4ff', onLevel: () => render(),
+  rules: `<ul>
+    <li><b>Left-click</b> an empty cell to bolt on the selected part. <b>Click a part</b> to rotate it. <b>Right-click</b> removes it.</li>
+    <li>Parts must chain back to the core. The top of the grid is the <b>front</b>; the ship faces the way you move.</li>
+    <li>Blasters, lances and thrusters need a <b>clear line</b> in the direction they point — anything in the way blocks them.</li>
+    <li>Weapons draw <b>power</b>. Go over the supply and everything fires slower.</li>
+    <li>Every part adds <b>mass</b>. Heavy ships are slow and turn like a barge.</li>
+    <li>Hostiles hit the <b>cell they touch</b>: armor bounces them, blades cut them, anything else is a hit taken.</li>
+  </ul>In a run: each level-up offers parts; your part budget grows with level.`,
+});
+const range = new Range(ui);
+const key = (x, y) => x + ',' + y;
+let cells = new Map(), A = {};
+const put = (x, y, type, rot = 0) => cells.set(key(x, y), { x, y, type, rot, t: 0 });
+const budget = () => 3 + 2 * ui.lvl.v;
+
+const PRESETS = {
+  Starter: [[3, 2, 'gun']],
+  Broadside: [[2, 3, 'rea'], [4, 3, 'rea'], [1, 3, 'gun', 3], [5, 3, 'gun', 1], [2, 2, 'gun', 3], [4, 2, 'gun', 1], [3, 2, 'lance'], [3, 4, 'thr', 2]],
+  Ram: [[3, 2, 'arm'], [3, 1, 'spk'], [2, 2, 'spk'], [4, 2, 'spk'], [2, 3, 'tur'], [4, 3, 'tur'], [3, 4, 'thr', 2], [2, 4, 'thr', 2], [4, 4, 'thr', 2]],
+};
+function preset(name) {
+  cells = new Map();
+  put(MID, MID, 'core');
+  for (const [x, y, t, r] of PRESETS[name]) put(x, y, t, r || 0);
+  render();
+}
+
+function analyse() {
+  const on = new Set([key(MID, MID)]), q = [[MID, MID]];
+  while (q.length) {
+    const [x, y] = q.pop();
+    for (const [dx, dy] of DIRS) {
+      const k = key(x + dx, y + dy);
+      if (cells.has(k) && !on.has(k)) { on.add(k); q.push([x + dx, y + dy]); }
+    }
+  }
+  let supply = 0, used = 0, mass = 0, thr = 0, blocked = 0;
+  for (const c of cells.values()) {
+    const P = PARTS[c.type];
+    c.on = on.has(key(c.x, c.y)); c.blocked = false; c.rate = 1; c.mul = 1;
+    if (!c.on) continue;
+    mass += P.mass;
+    if (P.dir) {
+      const [dx, dy] = DIRS[c.rot];
+      for (let x = c.x + dx, y = c.y + dy; x >= 0 && y >= 0 && x < N && y < N; x += dx, y += dy) {
+        if (cells.has(key(x, y))) { c.blocked = true; blocked++; break; }
+      }
+    }
+    if (c.blocked) continue;
+    if (P.pw < 0) supply -= P.pw; else used += P.pw;
+    if (c.type === 'thr') thr++;
+    for (const [dx, dy] of DIRS) {
+      const o = cells.get(key(c.x + dx, c.y + dy));
+      if (!o || !on.has(key(o.x, o.y))) continue;
+      if (o.type === 'rea') c.rate += 0.25;
+      if (o.type === 'amp') c.mul += 0.4;
+    }
+  }
+  const throttle = used > supply ? supply / used : 1;
+  return { supply, used, mass, thr, blocked, throttle,
+    speed: (150 * (1 + 0.5 * thr)) / (1 + 0.07 * mass), turn: (9 * (1 + 0.35 * thr)) / (1 + 0.1 * mass) };
+}
+
+const pal = palette(PARTS, 'gun');
+const gridEl = h('div', { class: 'grid' });
+const info = h('div', { class: 'info' });
+ui.left.append(
+  h('div', { class: 'bar' }, 'LOAD', Object.keys(PRESETS).map((n) => h('button', { onclick: () => preset(n) }, n))),
+  pal.el, h('div', { class: 'front' }, '▲ FRONT ▲'), gridEl, info);
+
+function render() {
+  A = analyse();
+  range.p.speed = A.speed; range.p.turn = A.turn;
+  gridEl.replaceChildren();
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const c = cells.get(key(x, y));
+    const near = DIRS.some(([dx, dy]) => cells.has(key(x + dx, y + dy)));
+    const el = h('div', { class: 'cell' + (c ? ' part' : near ? ' can' : '') + (c && !c.on ? ' off' : '') + (c && c.blocked ? ' blocked' : '') });
+    if (c) {
+      const P = PARTS[c.type];
+      el.style.setProperty('--k', P.col);
+      el.title = P.name + (c.blocked ? ' — BLOCKED' : !c.on ? ' — not connected' : '');
+      el.append(h('span', { style: { transform: `rotate(${c.rot * 90}deg)` } }, P.g));
+    }
+    el.onclick = () => {
+      if (c) { if (PARTS[c.type].dir) { c.rot = (c.rot + 1) % 4; render(); } }
+      else if (near && cells.size - 1 < budget()) { put(x, y, pal.cur); render(); }
+    };
+    el.oncontextmenu = (ev) => { ev.preventDefault(); if (c && c.type !== 'core') { cells.delete(key(x, y)); render(); } };
+    gridEl.append(el);
+  }
+  const n = cells.size - 1;
+  info.innerHTML =
+    `PARTS <b class="${n > budget() ? 'warn' : ''}">${n}/${budget()}</b> &nbsp; POWER <b class="${A.used > A.supply ? 'warn' : ''}">${A.used}/${A.supply}</b>` +
+    ` &nbsp; MASS <b>${A.mass}</b> &nbsp; SPEED <b>${A.speed.toFixed(0)}</b> &nbsp; TURN <b>${A.turn.toFixed(1)}</b><br>` +
+    (A.used > A.supply ? `<span class="warn">Underpowered: weapons at ${(A.throttle * 100).toFixed(0)}% fire rate. Add a reactor.</span> ` : '') +
+    (A.blocked ? `<span class="warn">${A.blocked} part(s) blocked — something is in their line.</span>` : '');
+}
+
+/** World position of a cell and the world angle of its facing. */
+function world(c) {
+  const p = range.p, th = p.a + Math.PI / 2, lx = (c.x - MID) * CS, ly = (c.y - MID) * CS;
+  return { x: p.x + lx * Math.cos(th) - ly * Math.sin(th), y: p.y + lx * Math.sin(th) + ly * Math.cos(th), a: p.a + (c.rot * Math.PI) / 2 };
+}
+
+range.onTick = (dt) => {
+  for (const c of cells.values()) {
+    const P = PARTS[c.type];
+    if (!P.dmg || !c.on || c.blocked) continue;
+    c.t -= dt * c.rate * A.throttle;
+    if (c.t > 0) continue;
+    const w = world(c), dmg = P.dmg * c.mul;
+    if (c.type === 'gun') range.shoot({ x: w.x, y: w.y, a: w.a, dmg, color: P.col });
+    else if (c.type === 'lance') range.beam(w.x, w.y, w.a, 330, dmg, P.col);
+    else {
+      const e = range.nearest(w.x, w.y, 270);
+      if (!e) { c.t = 0; continue; }
+      range.shoot({ x: w.x, y: w.y, a: Math.atan2(e.y - w.y, e.x - w.x), dmg, r: 3, color: P.col });
+    }
+    c.t += P.cd;
+  }
+};
+
+range.collide = (e) => {
+  let best = null, bd = 1e9;
+  for (const c of cells.values()) {
+    if (!c.on) continue;
+    const w = world(c), d = Math.hypot(w.x - e.x, w.y - e.y);
+    if (d < CS * 0.62 + e.r && d < bd) { best = c; bd = d; }
+  }
+  if (!best) return null;
+  if (best.type === 'arm') return 'block';
+  if (best.type === 'spk') { range.hurt(e, 45); return 'block'; }
+  return 'hit';
+};
+
+range.drawPlayer = (c) => {
+  const p = range.p;
+  c.save(); c.translate(p.x, p.y); c.rotate(p.a + Math.PI / 2);
+  for (const k of cells.values()) {
+    if (!k.on) continue;
+    const P = PARTS[k.type], x = (k.x - MID) * CS, y = (k.y - MID) * CS;
+    c.fillStyle = '#0a0d1a'; c.strokeStyle = P.col; c.lineWidth = 1.5;
+    c.fillRect(x - CS / 2 + 1, y - CS / 2 + 1, CS - 2, CS - 2);
+    c.strokeRect(x - CS / 2 + 1, y - CS / 2 + 1, CS - 2, CS - 2);
+    if (P.dir) {
+      c.save(); c.translate(x, y); c.rotate((k.rot * Math.PI) / 2);
+      c.fillStyle = P.col; c.beginPath(); c.moveTo(0, -5); c.lineTo(3.5, 2); c.lineTo(-3.5, 2); c.fill();
+      c.restore();
+    } else { c.fillStyle = P.col; c.fillRect(x - 2, y - 2, 4, 4); }
+  }
+  c.restore();
+};
+
+preset('Starter');
+range.start();
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SEQUENCER</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .seq { display: grid; grid-template-columns: 92px repeat(16, 28px); gap: 3px; align-items: center; }
+  .seq .name { font-weight: 700; color: var(--k); }
+  .seq .name small { display: block; color: var(--dim); font-weight: 400; font-size: 10px; }
+  .st { width: 28px; height: 40px; border: 1px solid #1a2238; background: #080a14; padding: 0; font-size: 9px; color: #04121a; font-weight: 700; }
+  .st.beat { background: #0e1324; border-color: #2c3a5c; }
+  .st.on { background: var(--k); border-color: var(--k); box-shadow: 0 0 10px -2px var(--k); }
+  .st.now { outline: 2px solid #fff; outline-offset: -2px; }
+  .num { color: var(--dim); font-size: 10px; text-align: center; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Concept 4 — SEQUENCER: the build is a beat. Each track is a weapon, each lit
+// step fires it, and every weapon rewards a different rhythm.
+const STEPS = 16, STEP = 60 / 112 / 4;
+const TRACKS = [
+  { id: 'kick', name: 'SHOCKWAVE', col: '#ff2bd6', rule: '×2 on the beat (1·5·9·13)' },
+  { id: 'hat', name: 'PULSE', col: '#5ff4ff', rule: '+20% per note in a row' },
+  { id: 'snare', name: 'SCATTER', col: '#ffd23c', rule: '+50% per rest before it' },
+  { id: 'lead', name: 'LANCE', col: '#3dffea', rule: '+60% per other track on the step' },
+];
+
+const ui = mountShell({
+  title: 'SEQUENCER', tag: 'Concept 4 — compose the loop', color: '#ff2bd6', onLevel: () => render(),
+  rules: `<ul>
+    <li><b>Click steps</b> to toggle notes. The loop plays forever at 112 BPM; every lit step fires that track's weapon. You hear what you built.</li>
+    <li>Notes are the budget. Where you spend them is the whole game, because each weapon likes a different rhythm:</li>
+    <li><b style="color:#ff2bd6">SHOCKWAVE</b> hits everything near you — double on the four main beats.</li>
+    <li><b style="color:#5ff4ff">PULSE</b> is a single shot — it ramps +20% for every note directly before it (up to ×2).</li>
+    <li><b style="color:#ffd23c">SCATTER</b> is a five-pellet burst — +50% for every empty step before it (up to ×3).</li>
+    <li><b style="color:#3dffea">LANCE</b> is a piercing beam — +60% for every other track that fires on the same step.</li>
+    <li>The number on a note is its damage multiplier.</li>
+  </ul>In a run: level-ups add notes, new tracks and per-track rules; note budget grows with level.`,
+});
+const range = new Range(ui);
+let grid = TRACKS.map(() => new Array(STEPS).fill(false)), step = -1, acc = 0, muted = false, ac = null, noise = null;
+const budget = () => 8 + 2 * ui.lvl.v, used = () => grid.flat().filter(Boolean).length;
+
+const PRESETS = {
+  Starter: ['x...x...x...x...', '', '', ''],
+  'Four on the floor': ['x...x...x...x...', '..xx..xx..xx..xx', '', 'x.......x.......'],
+  Breakbeat: ['x.........x.....', 'xxxxxx..........', '....x.......x...', 'x...x.....x.x...'],
+};
+function preset(n) { grid = PRESETS[n].map((s) => Array.from({ length: STEPS }, (_, i) => s[i] === 'x')); render(); }
+
+/** Damage multiplier of the note at (track, step), following that track's rhythm rule. */
+function power(tr, st) {
+  const g = grid[tr], back = (n) => g[(st - n + STEPS * 2) % STEPS];
+  if (tr === 0) return st % 4 === 0 ? 2 : 1;
+  if (tr === 1) { let n = 0; while (n < 5 && back(n + 1)) n++; return 1 + 0.2 * n; }
+  if (tr === 2) { let n = 0; while (n < 4 && !back(n + 1)) n++; return 1 + 0.5 * n; }
+  return 1 + 0.6 * grid.filter((o, i) => i !== tr && o[st]).length;
+}
+
+function fire(tr, st) {
+  const p = range.p, m = power(tr, st), a = range.aim(p.x, p.y), col = TRACKS[tr].col;
+  if (tr === 0) range.blast(p.x, p.y, 70 + 12 * m, 5 * m, col);
+  else if (tr === 1) range.shoot({ a, dmg: 4 * m, r: 3 + m, color: col });
+  else if (tr === 2) for (let i = -2; i <= 2; i++) range.shoot({ a: a + i * 0.15, dmg: 1.6 * m, r: 3, life: 0.7, color: col });
+  else range.beam(p.x, p.y, a, 340, 5 * m, col, 4 + 3 * m);
+  sound(tr, st, m);
+}
+
+function sound(tr, st, m) {
+  if (!ac || muted) return;
+  const t = ac.currentTime, out = ac.createGain(), v = Math.min(1, 0.45 + 0.2 * m);
+  out.connect(ac.destination);
+  const tone = (type, f0, f1, len, vol) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+    o.connect(g).connect(out); o.start(t); o.stop(t + len);
+  };
+  const hiss = (type, freq, len, vol) => {
+    const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = noise; f.type = type; f.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+    s.connect(f).connect(g).connect(out); s.start(t); s.stop(t + len);
+  };
+  if (tr === 0) tone('sine', 150, 42, 0.22, 0.7 * v);
+  else if (tr === 1) hiss('highpass', 7000, 0.05, 0.22 * v);
+  else if (tr === 2) { hiss('bandpass', 1800, 0.14, 0.4 * v); tone('triangle', 190, 120, 0.1, 0.2 * v); }
+  else { const f = [220, 261.6, 329.6, 392, 440, 523.3, 392, 329.6][st % 8]; tone('sawtooth', f, f, 0.16, 0.13 * v); }
+}
+function wake() {
+  if (ac) return;
+  ac = new AudioContext();
+  noise = ac.createBuffer(1, ac.sampleRate * 0.3, ac.sampleRate);
+  const d = noise.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+addEventListener('pointerdown', wake);
+
+range.onTick = (dt) => {
+  acc += dt;
+  while (acc >= STEP) {
+    acc -= STEP; step = (step + 1) % STEPS;
+    grid.forEach((g, tr) => { if (g[step]) fire(tr, step); });
+    cells.forEach((row) => row.forEach((el, i) => el.classList.toggle('now', i === step)));
+  }
+};
+
+const seqEl = h('div', { class: 'seq' });
+const info = h('div', { class: 'info' });
+const muteBtn = h('button', { onclick: () => { muted = !muted; muteBtn.textContent = muted ? 'Sound: off' : 'Sound: on'; } }, 'Sound: on');
+let cells = [];
+ui.left.append(
+  h('div', { class: 'bar' }, 'LOAD', Object.keys(PRESETS).map((n) => h('button', { onclick: () => preset(n) }, n)),
+    h('button', { onclick: () => preset('Starter') || 0 }, 'Reset'), muteBtn),
+  seqEl, info);
+
+function render() {
+  seqEl.replaceChildren(h('span', {}), Array.from({ length: STEPS }, (_, i) => h('span', { class: 'num' }, i % 4 === 0 ? String(i / 4 + 1) : '·')));
+  cells = TRACKS.map((T, tr) => {
+    seqEl.append(h('div', { class: 'name', style: { '--k': T.col } }, T.name, h('small', {}, T.rule)));
+    return grid[tr].map((on, st) => {
+      const el = h('button', { class: 'st' + (st % 4 === 0 ? ' beat' : '') + (on ? ' on' : '') + (st === step ? ' now' : ''), style: { '--k': T.col },
+        onclick: () => { if (on || used() < budget()) { grid[tr][st] = !on; render(); } } }, on ? power(tr, st).toFixed(1) : '');
+      seqEl.append(el);
+      return el;
+    });
+  });
+  let total = 0;
+  const per = TRACKS.map((T, tr) => {
+    const base = [5, 4, 8, 5][tr];
+    const s = grid[tr].reduce((a, on, st) => a + (on ? base * power(tr, st) : 0), 0);
+    total += s;
+    return `<span style="color:${T.col}">${(s / (STEPS * STEP)).toFixed(0)}</span>`;
+  });
+  info.innerHTML = `NOTES <b class="${used() > budget() ? 'warn' : ''}">${used()}/${budget()}</b> &nbsp; PAPER DPS, ONE TARGET <b>${(total / (STEPS * STEP)).toFixed(0)}</b> (${per.join(' + ')})<br>` +
+    '<small>Shockwave and lance hit many targets, so real damage in a crowd is higher. Click anywhere once to enable sound.</small>';
+}
+
+preset('Starter');
+range.start();
+</script>
+</body>
+</html>

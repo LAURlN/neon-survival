@@ -1,10 +1,10 @@
 /** DOM user interface: HUD and the overlay screens (title, choices, pause, result). */
 import { VOCAB } from '../data/theme';
 import type { Sfx } from '../engine/audio';
+import { PASSIVES } from '../game/content';
 import type { Game } from '../game/game';
 import type { Offer } from '../game/progression';
-import { SPELL_NAMES } from '../game/effects';
-import { SPELL_DEFS } from '../game/content';
+import { sourceColor, sourceName } from '../data/weapons';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -20,13 +20,11 @@ export const formatTime = (seconds: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
 
-/** Two-letter badge for a name: "Magic Bolt" -> "MB", "Fireball" -> "Fi". */
+/** Two-letter badge for a name: "Lucky Cat" -> "LC", "Radar" -> "Ra". */
 const initials = (name: string) => {
   const words = name.split(/[\s-]+/).filter(Boolean);
   return words.length > 1 ? (words[0][0] + words[1][0]).toUpperCase() : name.slice(0, 2);
 };
-
-const SPELL_COLOR: Record<string, string> = Object.fromEntries(SPELL_DEFS.map((s) => [s.key, s.color]));
 
 export interface Record_ {
   time: number;
@@ -59,12 +57,15 @@ export class UI {
   private readonly level = $('level');
   private readonly timer = $('timer');
   private readonly kills = $('kills');
-  private readonly loadout = $('loadout');
   private readonly announce = $('announce');
-  private chips = new Map<number, HTMLElement>();
+  private readonly circuitBtn = $('circuit');
+  private readonly spares = $('spares');
+  private lastSpares = -1;
   private lastSecond = -1;
 
   onPause: () => void = () => {};
+  /** Opens the circuit editor. */
+  onCircuit: () => void = () => {};
   /** Toggles mute and returns the new state. */
   onMute: () => boolean = () => false;
   /** UI sound hook. */
@@ -74,6 +75,7 @@ export class UI {
 
   constructor() {
     $('pause').addEventListener('click', () => this.onPause());
+    this.circuitBtn.addEventListener('click', () => this.onCircuit());
     this.muteBtn.addEventListener('click', () => this.setMuted(this.onMute()));
   }
 
@@ -90,10 +92,8 @@ export class UI {
 
   showHud(show: boolean) {
     this.hud.hidden = !show;
-    // Always start from a clean slate: the chips belong to one run.
-    this.chips.clear();
-    this.loadout.replaceChildren();
     this.lastSecond = -1;
+    this.lastSpares = -1;
   }
 
   updateHud(g: Game) {
@@ -106,20 +106,12 @@ export class UI {
     this.level.textContent = `Lv ${g.level}`;
     this.kills.textContent = String(g.kills);
 
-    for (const [id, spell] of g.progression.spells) {
-      let chip = this.chips.get(id);
-      if (!chip) {
-        chip = el('div', 'chip');
-        chip.style.setProperty('--c', spell.color);
-        chip.append(el('span'));
-        chip.title = spell.def.name;
-        this.loadout.append(chip);
-        this.chips.set(id, chip);
-      }
-      chip.style.setProperty('--cd', spell.cooldownLeft.toFixed(2));
-      const label = String(spell.level + spell.overLevel);
-      const span = chip.firstElementChild!;
-      if (span.textContent !== label) span.textContent = label;
+    // The circuit button counts the tiles still waiting to be wired in.
+    const spares = g.board.spares;
+    if (spares !== this.lastSpares) {
+      this.lastSpares = spares;
+      this.spares.textContent = spares ? String(spares) : '';
+      this.circuitBtn.classList.toggle('has', spares > 0);
     }
 
     const a = g.director.announce;
@@ -158,7 +150,7 @@ export class UI {
     this.open(
       title,
       el('p', 'sub', VOCAB.tagline),
-      el('p', 'sub', 'Drag anywhere to move (or WASD). Programs fire on their own. Collect data shards to level up and install new programs.'),
+      el('p', 'sub', 'Drag anywhere to move (or WASD). Your circuit fires on its own. Level up to collect tiles, then tap ⌬ to wire them in.'),
       best ? el('p', 'sub', `Best: ${formatTime(best.time)} · ${best.kills} kills · Lv ${best.level}`) : null,
       this.button('JACK IN', onStart, true),
     );
@@ -178,13 +170,13 @@ export class UI {
           const ul = el('ul');
           for (const line of offer.lines) ul.append(el('li', '', line));
           const icon = el('div', 'icon');
-          icon.append(el('span', '', initials(offer.title)));
+          icon.append(el('span', '', offer.icon ?? initials(offer.title)));
           card.append(icon, el('div', 'title', offer.title),
                       el('div', 'tag', offer.tag), ul);
           card.addEventListener('click', () => {
             this.sfx('select');
             const next = offer.apply();
-            if (next && next.length > 0) render(VOCAB.chooseTrait.toUpperCase(), next);
+            if (next && next.length > 0) render(title, next);
             else {
               this.close();
               resolve();
@@ -203,23 +195,21 @@ export class UI {
   private loadoutList(g: Game) {
     const list = el('div', 'list');
     const pr = g.progression;
-    for (const s of pr.spells.values()) {
-      const row = el('div');
-      const traits = s.def.traitGroups.flat().filter((t) => s.has(t.id)).map((t) => t.name);
-      row.textContent = `${s.def.name} — Lv ${s.level}${s.overLevel ? ` +${s.overLevel}` : ''}` +
-                        (traits.length ? ` (${traits.join(', ')})` : '');
-      row.style.color = s.color;
-      list.append(row);
-    }
+    const weapons = new Set<string>();
+    for (const t of g.board.tiles.values()) if (t.label) weapons.add(t.label);
+    list.append(el('div', '', `Firing: ${[...weapons].join(', ') || 'nothing — wire a reactor to an emitter'}`));
+    const upgrades = PASSIVES.filter((p) => pr.passives.has(p.id)).map((p) => `${p.name} ${pr.passives.get(p.id)}`);
+    if (upgrades.length) list.append(el('div', '', `Upgrades: ${upgrades.join(', ')}`));
     if (pr.artifacts.length) list.append(el('div', '', `Cyberware: ${pr.artifacts.map((a) => a.name).join(', ')}`));
     return list;
   }
 
-  showPause(g: Game, onResume: () => void, onQuit: () => void) {
+  showPause(g: Game, onResume: () => void, onCircuit: () => void, onQuit: () => void) {
     this.open(
       el('h2', '', 'PAUSED'),
       this.loadoutList(g),
       this.button('Resume', onResume, true),
+      this.button('Edit circuit', onCircuit),
       this.button('Disconnect', onQuit),
     );
   }
@@ -237,16 +227,16 @@ export class UI {
       stats.append(cell);
     }
 
-    // Damage dealt per spell, like the original's combat record.
+    // Damage dealt per weapon.
     const list = el('div', 'list');
     const entries = [...g.damageBy.entries()].sort((a, b) => b[1] - a[1]);
     const top = entries[0]?.[1] ?? 1;
     for (const [key, dmg] of entries) {
       const row = el('div', 'row');
       const bar = el('div', 'bar');
-      bar.style.setProperty('--c', SPELL_COLOR[key] ?? '#ffb347');
+      bar.style.setProperty('--c', sourceColor(key));
       bar.style.width = `${Math.max(2, (dmg / top) * 100)}%`;
-      row.append(el('span', '', SPELL_NAMES[key] ?? 'Cyberware'), bar, el('span', '', Math.round(dmg).toLocaleString()));
+      row.append(el('span', '', sourceName(key)), bar, el('span', '', Math.round(dmg).toLocaleString()));
       list.append(row);
     }
 

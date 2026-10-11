@@ -123,10 +123,6 @@ export class Renderer {
     for (const e of g.enemies) if (visible(e.x, e.y, e.r + 14)) this.drawEnemy(e, p.x, p.y, g.time);
     this.drawBars(g);
 
-    ctx.globalCompositeOperation = 'lighter';
-    for (const s of g.progression.spells.values()) s.draw(ctx);
-    ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'source-over';
     this.drawPlayer(g);
 
     ctx.globalCompositeOperation = 'lighter';

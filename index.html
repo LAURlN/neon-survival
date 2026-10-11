@@ -7,7 +7,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="Neon Survival - an unofficial cyberpunk browser remake of Magic Survival." />
+    <meta name="description" content="Neon Survival - wire your own weapons on a circuit board and survive the grid." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
     <title>Neon Survival</title>
@@ -22,14 +22,15 @@
         <span id="level">Lv 1</span>
         <span id="timer">00:00</span>
         <span id="kills">0</span>
+        <button id="circuit" aria-label="Edit circuit">⌬<i id="spares"></i></button>
         <button id="mute" aria-label="Sound" aria-pressed="false">♪</button>
         <button id="pause" aria-label="Pause">II</button>
       </div>
-      <div id="loadout"></div>
       <div id="announce"></div>
     </div>
 
     <div id="overlay" hidden></div>
+    <div id="editor" hidden></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

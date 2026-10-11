@@ -1,31 +1,38 @@
 # Neon Survival
 
-An unofficial, from-scratch browser remake of the mobile game *Magic Survival* with a cyberpunk skin,
-playable on a phone.
+A browser survival game, playable on a phone, where you do not pick weapons - you **wire them**. Energy
+sparks run across a circuit board you build during the run, and whatever reaches an emitter is fired as a
+weapon.
 
 **Play:** https://laurln.github.io/neon-survival/
 
-Drag anywhere to move (or WASD / arrow keys). Programs fire on their own. Collect data shards to level up
-and install new programs; open data caches for cyberware. `Esc` / `P` pauses, `♪` mutes.
+Drag anywhere to move (or WASD / arrow keys). Level up to collect tiles, then tap `⌬` (or press `E`) to
+open the circuit and place them. `Esc` / `P` pauses, `♪` mutes.
 
-> Fan project, not affiliated with or endorsed by the original developer. It contains **no assets from
-> the original game**: all graphics are drawn procedurally, all sound is synthesised at runtime and all
-> text is generated. Only numeric
-> balance data and short names are derived from the original's data tables.
+> Started as an unofficial fan remake of *Magic Survival* and still uses numeric balance data (enemies,
+> XP curve, stat upgrades, cyberware) derived from that game's tables. It contains **no assets from it**:
+> all graphics are drawn procedurally and all sound is synthesised at runtime. Not affiliated with or
+> endorsed by the original developer.
 
-## What is in it
+## The circuit
 
-| | Count | Source |
+- **Reactors** throw sparks in a straight line, ten board cells per second. A spark flies until it enters a
+  tile or leaves the board. The board has no edges.
+- Tiles change the spark: route it (mirror, splitter, gates), make it stronger (amplifier, capacitor), or
+  set one of its three properties.
+- An **emitter** fires the spark. Its **shape** (arrow, beam, seeker, bomb) and **type** (aimed, loose,
+  orbit, sky, lock) pick one of 20 weapons; its **element** (fire, shock, cryo, acid) adds an effect to
+  every hit; its energy is the damage.
+- You own a limited number of each tile. Level-ups give basic tiles (and sometimes a stat upgrade); data
+  caches give special tiles with stronger or unique behaviour, and cyberware.
+
+| | Count | Where |
 |---|---|---|
-| Active spells | 21 (all) | level-by-level upgrades from the original tables; base values hand-tuned |
-| Spell traits | 61 of 66 | effects from the original tables; behaviour re-implemented |
-| Passives | 9 of 10 | original tables |
-| Artifacts | 76 of 182 | original tables (those made only of effects we implement) |
-| Enemies | 29 | HP / ATK / speed / mana from the original tables |
-| XP curve | 128 levels | original table |
-
-Not implemented yet: classes, magic combinations (fusions), synergies, research, zones, the 5 remaining
-traits, meta-progression.
+| Tiles | 42 (26 basic, 16 special) | `src/data/tiles.ts` |
+| Weapons | 20 (4 shapes × 5 types) | `src/data/weapons.ts`, `src/circuit/weapons.ts` |
+| Elements | 4 | `src/circuit/weapons.ts` |
+| Stat upgrades / cyberware | 9 / 53 | `game-data.json`, filtered by `src/game/effects.ts` |
+| Enemies | 29 | `game-data.json` |
 
 ## Development
 
@@ -37,50 +44,61 @@ npm run build    # typecheck + production build into dist/
 
 Pushing to `main` deploys to GitHub Pages via `.github/workflows/deploy.yml`.
 
-`window.game` is exposed in the browser console for poking at a live run.
+`window.game` is exposed in the browser console for poking at a live run, e.g.
+`game.board.give('fusion')`.
+
+`prototypes/` holds the five standalone build-system concepts this design was chosen from (open
+`prototypes/index.html` through the dev server). They are not part of the build.
 
 ## How it is put together
 
 ```
 src/
   data/
-    game-data.json   numbers distilled from the original's tables (generated, do not edit)
-    tuning.ts        everything hand-tuned: base spell stats, waves, drop rates
-    theme.ts         the cyberpunk skin: display names, card text, colours, vocabulary
+    tiles.ts         every circuit tile, as data
+    weapons.ts       the shape × type weapon matrix: names and power
+    tuning.ts        hand-tuned game values: player, waves, drop rates
+    theme.ts         display names and vocabulary
+    game-data.json   enemy stats, XP curve, upgrades, cyberware (generated, do not edit)
+  circuit/
+    spark.ts         what a spark is: energy + element, shape, type
+    board.ts         the board simulation: tiles, inventory, sparks, one handler per tile behaviour
+    weapons.ts       one function per weapon, plus what each element does on hit
   engine/            input (virtual joystick), audio (WebAudio synth), spatial grid, math helpers
   game/
-    effects.ts       effect id -> stat key table
-    stats.ts         StatSheet: folds [effectId, value] pairs into flat / pct / mul buckets
-    content.ts       typed view of the data + "is this upgrade playable" rule
     game.ts          world state, update loop, damage, projectiles / zones / beams, pickups
     director.ts      enemy spawning
-    player.ts        movement, HP, shields, damage taken
-    progression.ts   what the player owns and how level-up / chest offers are built
-    spells/          one file per spell + registry (index.ts)
-  render/renderer.ts all drawing (procedural, no image assets)
-  ui/ui.ts           DOM HUD and overlay screens
+    player.ts        movement, HP, damage taken
+    progression.ts   what level-ups and data caches offer
+    effects.ts       effect id -> stat key table for upgrades and cyberware
+    stats.ts         StatSheet: folds [effectId, value] pairs into flat / pct / mul buckets
+    content.ts       typed view of game-data.json
+  render/renderer.ts all world drawing (procedural, no image assets)
+  ui/
+    ui.ts            DOM HUD and overlay screens
+    editor.ts        the circuit editor
 ```
 
-The design mirrors the original's: **every upgrade is a list of `[effectId, value]` pairs**. A spell level,
-a trait, a passive and an artifact are all the same thing as far as the code is concerned. Gameplay code
-never inspects upgrades; it only reads stats such as `fireball.dmg` or `cd` from the `StatSheet`.
+The board knows nothing about the game world: it reads `sense` and `rate`, and reports each emission
+through `fire`. Weapons know nothing about the board: they get a spark and call the helpers on `Game`
+(`hit`, `explode`, `strikeLine`, `spawnProjectile`, `addZone`, `addBeam`, `after`, ...).
 
 ### Adding things
 
-- **Unlock more artifacts / passives** - add the missing effect ids to `src/game/effects.ts`. An upgrade
-  becomes available automatically once every effect id it uses is known. For effects that need behaviour
-  (not just a number), read the stat where it matters, e.g. `stats.flat('execute')` in `Game.hit`.
-- **Unlock a trait** - add its id and text to `TRAITS` in `tuning.ts` and handle `this.has(id)` in the
-  spell's file.
-- **Add a spell** - subclass `Spell` in `src/game/spells/`, register it in `spells/index.ts`, add its base
-  stats to `SPELLS` in `tuning.ts` and its effect ids to `effects.ts`.
-- **Balance** - `src/data/tuning.ts`.
-- **Re-skin** - `src/data/theme.ts` holds every player-facing name and colour (code and data keep the
-  original identifiers, e.g. the key `bolt` is shown as "Pulse Shot"); `src/style.css` styles the UI.
+- **A tile that reuses a behaviour** (a stronger amplifier, a faster reactor, a 4-way splitter) - one
+  entry in `src/data/tiles.ts`. `rarity` 0-1 drops from level-ups, 2+ from data caches.
+- **A tile with a new behaviour** - add a name to `TileOp`, a `case` in `Board.enter` in
+  `src/circuit/board.ts`, then the entry in `tiles.ts`.
+- **A new condition for sensor gates** - add a field to `Board.sense`, set it in `Game.update`.
+- **A new source trigger** (like "on kill") - call `board.trigger('...')` where it happens.
+- **A weapon shape or type** - add it to the union in `spark.ts`, give it a row / column in
+  `data/weapons.ts`, one function per new pair in `FIRE` in `circuit/weapons.ts`, and a setter tile.
+- **An element** - add it to `spark.ts` (type, colour) and a case in `elementHook` in `circuit/weapons.ts`.
+- **Balance** - weapon `power` in `data/weapons.ts`, tile numbers in `data/tiles.ts`, everything else in
+  `data/tuning.ts` (`energyDamage` scales all circuit damage at once).
+- **More cyberware** - add the missing effect ids to `src/game/effects.ts`; an item becomes available
+  once every effect id it uses is known.
 - **Sound** - add a case to `AudioEngine.play` in `src/engine/audio.ts` and call `game.sound('name')`.
-  Spell cast sounds are mapped in `CAST_SFX` in `spells/spell.ts`. The music is the step sequencer in
-  `scheduleStep`.
-- **New enemy look or effect** - `src/render/renderer.ts`.
 
 ## Reverse-engineering notes
 
@@ -97,10 +115,8 @@ The original is a Unity (2022.3) IL2CPP build. The pipeline in `tools/` is:
 5. `tools/build-data.py <extracted text dir> src/data/game-data.json` distils the tables into the data
    file the game ships.
 
-What that recovered: enemy stats, the XP curve, and for every spell / trait / passive / artifact the exact
-`(effectId, value)` list. What it did not: base spell values (damage, cooldown at level 1) and the spawn
-timeline are assigned in native code, so those are our own values in `tuning.ts`. Spell *behaviour* is
-re-implemented from the names of the fields and coroutines plus the in-game descriptions.
+The game now only uses part of what that recovered: enemy stats, the XP curve, and the `(effectId, value)`
+lists of the stat upgrades and cyberware. The spawn timeline and everything about the circuit are our own.
 
 The original APK and anything extracted from it are deliberately git-ignored and are not part of this
 repository.

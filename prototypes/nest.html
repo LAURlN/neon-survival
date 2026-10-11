@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NEST</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .roots { display: flex; gap: 10px; align-items: flex-start; }
+  .root { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .root > small { color: var(--dim); }
+  .node { border: 1px solid var(--n); border-left-width: 4px; background: color-mix(in srgb, var(--n) 9%, #080a14); padding: 6px 6px 6px 8px; display: flex; flex-direction: column; gap: 5px; }
+  .node .hd { display: flex; align-items: center; gap: 8px; }
+  .node .hd b { color: var(--n); }
+  .node .hd small { color: var(--dim); flex: 1; font-size: 10.5px; }
+  .node .hd button { padding: 0 6px; }
+  .trig { color: var(--n); font-size: 11px; letter-spacing: 0.08em; }
+  .sock { border-style: dashed; color: var(--dim); text-align: left; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Concept 5 — NEST: every part has a trigger socket that holds another part.
+// A weapon is a tree of "when this happens, release that".
+const PARTS = {
+  bolt:  { name: 'BOLT', col: '#5ff4ff', trig: 'ON HIT', w: 1, k: 0.5, desc: 'Fast shot, 10 dmg' },
+  seek:  { name: 'SEEKER', col: '#3dffea', trig: 'ON HIT', w: 1.5, k: 0.5, desc: 'Homing missile, 14 dmg' },
+  orb:   { name: 'ORB', col: '#b48cff', trig: 'EVERY 0.55 s', w: 2, k: 1.2, desc: 'Slow drifting orb, burns what it touches' },
+  blast: { name: 'BLAST', col: '#ff9a3c', trig: 'PER KILL (max 3)', w: 1.5, k: 0.5, desc: 'Explosion right where it is triggered' },
+  fork:  { name: 'FORK', col: '#ffd23c', trig: '×3 IN A FAN', w: 0.5, k: 1.6, desc: 'No damage — releases its socket three times' },
+};
+
+const ui = mountShell({
+  title: 'NEST', tag: 'Concept 5 — nest the triggers', color: '#ff9a3c', onLevel: () => render(),
+  rules: `<ul>
+    <li>Pick a part, then <b>click a socket</b> to plug it in. <b>×</b> rips a part out with everything nested in it.</li>
+    <li>Each part has one <b>trigger socket</b>. Whatever sits in it is released from that spot when the trigger happens: a bolt's hit, an orb's pulse, a blast's kills.</li>
+    <li>Nested parts are <b>cheap</b> — a socketed part adds only about half its weight to the cooldown — but they only fire if the trigger actually happens.</li>
+    <li>So: BLAST inside BOLT is a grenade. BLAST inside BLAST inside BOLT is a chain reaction — if the first one kills. ORB → FORK → SEEKER is a drifting missile battery.</li>
+  </ul>In a run: level-ups offer parts; part budget and the number of separate weapons grow with level.`,
+});
+const range = new Range(ui);
+let roots = [], timers = [0, 0, 0];
+const budget = () => 2 + ui.lvl.v, slots = () => 1 + Math.floor((ui.lvl.v - 1) / 3);
+const size = (n) => (n ? 1 + size(n.child) : 0), used = () => roots.reduce((s, r) => s + size(r), 0);
+const cost = (n) => (n ? PARTS[n.type].w + PARTS[n.type].k * cost(n.child) : 0);
+const cooldown = (n) => 0.32 * cost(n);
+const mk = (...types) => types.reduceRight((child, type) => ({ type, child }), null);
+
+const PRESETS = {
+  Starter: [mk('bolt')],
+  'Chain reaction': [mk('bolt', 'blast', 'blast', 'blast')],
+  'Missile battery': [mk('orb', 'fork', 'seek', 'blast')],
+};
+
+function fire(n, ctx) {
+  if (!n) return;
+  const P = PARTS[n.type], { x, y, skip } = ctx, a = ctx.a ?? range.aim(x, y, skip);
+  const kid = (kx, ky, ks) => fire(n.child, { x: kx, y: ky, skip: ks });
+  if (n.type === 'bolt') range.shoot({ x, y, a, skip, dmg: 10, color: P.col, onHit: (e) => kid(e.x, e.y, e) });
+  else if (n.type === 'seek') range.shoot({ x, y, a, skip, dmg: 14, speed: 330, homing: 6, life: 2.2, r: 5, color: P.col, onHit: (e) => kid(e.x, e.y, e) });
+  else if (n.type === 'orb') range.shoot({ x, y, a, speed: 75, r: 10, dmg: 4, pierce: 9999, rehit: 0.5, life: 2.7, color: P.col, pulse: { every: 0.55, fn: (s) => kid(s.x, s.y) } });
+  else if (n.type === 'blast') range.blast(x, y, 58, 12, P.col).slice(0, 3).forEach((e) => kid(e.x, e.y));
+  else for (const i of [-1, 0, 1]) fire(n.child, { x, y, skip, a: a + i * 0.42 });
+}
+
+range.onTick = (dt) => {
+  roots.forEach((r, i) => {
+    if (!r || i >= slots()) return;
+    if ((timers[i] -= dt) > 0) return;
+    timers[i] += cooldown(r);
+    fire(r, { x: range.p.x, y: range.p.y });
+  });
+};
+
+const pal = palette(PARTS, 'blast');
+const rootsEl = h('div', { class: 'roots' });
+const info = h('div', { class: 'info' });
+ui.left.append(
+  h('div', { class: 'bar' }, 'LOAD', Object.keys(PRESETS).map((n) => h('button', { onclick: () => { roots = JSON.parse(JSON.stringify(PRESETS[n])); render(); } }, n))),
+  pal.el, rootsEl, info);
+
+function view(node, set) {
+  if (!node) return h('button', { class: 'sock', onclick: () => { if (used() < budget()) set({ type: pal.cur, child: null }); } }, '+ empty socket');
+  const P = PARTS[node.type];
+  return h('div', { class: 'node', style: { '--n': P.col } },
+    h('div', { class: 'hd' }, h('b', {}, P.name), h('small', {}, P.desc), h('button', { onclick: () => set(null) }, '×')),
+    h('div', { class: 'trig' }, P.trig + ' ▸'),
+    view(node.child, (c) => { node.child = c; render(); }));
+}
+function render() {
+  rootsEl.replaceChildren();
+  for (let i = 0; i < slots(); i++) {
+    rootsEl.append(h('div', { class: 'root' },
+      h('small', {}, `WEAPON ${i + 1}` + (roots[i] ? ` — fires every ${cooldown(roots[i]).toFixed(2)} s` : '')),
+      view(roots[i], (c) => { roots[i] = c; timers[i] = 0; render(); })));
+  }
+  info.innerHTML = `PARTS <b class="${used() > budget() ? 'warn' : ''}">${used()}/${budget()}</b> &nbsp; WEAPONS <b>${slots()}</b>`;
+}
+
+roots = JSON.parse(JSON.stringify(PRESETS.Starter));
+render();
+range.start();
+</script>
+</body>
+</html>

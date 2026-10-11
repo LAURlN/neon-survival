@@ -28,9 +28,15 @@ export interface Enemy {
   touchT: number;
   /** Per-source "next allowed hit" timestamps, for things that re-hit on an interval. */
   hitT: Record<string, number>;
-  /** Counters used by traits (EMP hits, melt stacks). */
   hits: number;
+  /** Acid: percent extra damage taken. */
   melt: number;
+  /** Fire: damage per second, seconds left, and time since the last burn tick. */
+  burn: number;
+  burnT: number;
+  burnAcc: number;
+  /** Cryo: seconds of slowed movement left. */
+  chill: number;
   /** Rusher enemies dash periodically. */
   dashT: number;
   wobble: number;
@@ -46,7 +52,7 @@ export interface Projectile {
   vy: number;
   r: number;
   dmg: number;
-  /** Stat key of the spell that fired it (for crit and damage tracking). */
+  /** Key of the weapon that fired it (for damage tracking). */
   src: string;
   /** Remaining enemies it can pass through; Infinity pierces everything. */
   pierce: number;
@@ -114,6 +120,7 @@ export interface Beam {
   color: string;
   /** Radians per second. */
   spin: number;
+  onHit?(e: Enemy): void;
   dead: boolean;
 }
 

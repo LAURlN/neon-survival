@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KERNEL</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  .tape { display: flex; flex-wrap: wrap; gap: 8px; min-height: 64px; padding: 10px; border: 1px solid var(--line); background: #080a14; align-items: center; }
+  .stmt { display: flex; gap: 3px; padding: 4px; border: 1px dashed #24304f; }
+  .stmt.run { border: 1px solid #fff; box-shadow: 0 0 12px -2px var(--c); }
+  .stmt.skip { opacity: 0.45; }
+  .op { padding: 5px 8px; border: 1px solid var(--k); color: var(--k); background: color-mix(in srgb, var(--k) 12%, #080a14); cursor: grab; font-weight: 700; white-space: nowrap; }
+  .op:hover { filter: brightness(1.4); }
+  .free { color: var(--dim); padding: 0 6px; }
+  .heat { height: 10px; background: #0c0f1e; border: 1px solid var(--line); position: relative; }
+  .heat i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #3dffea, #ffd23c 60%, #ff2e4d); }
+  .heat u { position: absolute; left: 66.6%; top: -3px; bottom: -3px; border-left: 1px solid #fff; }
+  .palette button { width: 144px; }
+</style>
+</head>
+<body>
+<script src="shared.js"></script>
+<script>
+// Concept 3 — KERNEL: program the weapon. A clock walks a tape of instructions;
+// modifiers stack onto the next action, flow ops decide whether and how often
+// it runs, and heat punishes programs that never breathe.
+const CLOCK = 5, ACT = '#5ff4ff', MOD = '#ff9a3c', FLOW = '#b48cff';
+const OPS = {
+  BOLT:  { name: 'BOLT', k: 'act', col: ACT, cyc: 2, heat: 4, desc: 'ACTION 2 cycles: shot at nearest, 10 dmg' },
+  NOVA:  { name: 'NOVA', k: 'act', col: ACT, cyc: 3, heat: 9, desc: 'ACTION 3 cycles: shockwave around you' },
+  LANCE: { name: 'LANCE', k: 'act', col: ACT, cyc: 4, heat: 12, desc: 'ACTION 4 cycles: piercing beam, 24 dmg' },
+  MINE:  { name: 'MINE', k: 'act', col: ACT, cyc: 2, heat: 5, desc: 'ACTION 2 cycles: proximity mine, 30 dmg' },
+  VENT:  { name: 'VENT', k: 'act', col: '#3dffea', cyc: 2, heat: -55, desc: 'ACTION 2 cycles: dump 55 heat' },
+  AMP:   { name: 'AMP', k: 'mod', col: MOD, desc: 'MOD 1 cycle: next action ×1.8 damage' },
+  SPLIT: { name: 'SPLIT', k: 'mod', col: MOD, desc: 'MOD 1 cycle: next action ×3 at 75%' },
+  DRILL: { name: 'DRILL', k: 'mod', col: MOD, desc: 'MOD 1 cycle: pierce 3 / +25% dmg' },
+  SEEK:  { name: 'SEEK', k: 'mod', col: MOD, desc: 'MOD 1 cycle: bolts home in' },
+  BURST: { name: 'BURST', k: 'mod', col: MOD, desc: 'MOD 1 cycle: explodes for 50% on hit' },
+  X2:    { name: '×2', k: 'flow', col: FLOW, desc: 'FLOW free: run the next action twice' },
+  NEAR:  { name: 'IF NEAR', k: 'flow', col: FLOW, test: () => !!range.nearest(range.p.x, range.p.y, 120), desc: 'FLOW: only if a hostile is close' },
+  FAR:   { name: 'IF FAR', k: 'flow', col: FLOW, test: () => !range.nearest(range.p.x, range.p.y, 120), desc: 'FLOW: only if nothing is close' },
+  HOT:   { name: 'IF HOT', k: 'flow', col: FLOW, test: () => heat > 60, desc: 'FLOW: only if heat is over 60' },
+  KILL:  { name: 'IF KILL', k: 'flow', col: FLOW, test: () => range.t - range.lastKillT < 0.8, desc: 'FLOW: only if you just killed' },
+};
+
+const ui = mountShell({
+  title: 'KERNEL', tag: 'Concept 3 — program the weapon', color: '#b48cff', onLevel: () => render(),
+  rules: `<ul>
+    <li><b>Click</b> an instruction to append it. <b>Click one on the tape</b> to delete it. <b>Drag</b> to reorder.</li>
+    <li>The kernel runs the tape left to right at <b>${CLOCK} cycles/second</b>, forever.</li>
+    <li>A statement is <b>[flow] [mods] ACTION</b>. Mods stack onto the action and cost a cycle each; they multiply, so long chains hit very hard but fire rarely.</li>
+    <li><b>IF</b> guards the whole statement. A failed check costs one cycle and skips it.</li>
+    <li>Every action makes <b>heat</b> (more with mods). Past 100 the clock runs at half speed until you cool to 60. Heat bleeds off slowly — or <b>VENT</b> it, ideally only <b>IF HOT</b>.</li>
+  </ul>In a run: level-ups offer instructions; tape length grows with level.`,
+});
+const range = new Range(ui);
+let tape = [], stmts = [], pc = 0, wait = 0, heat = 0, throttled = false, drag = -1, running = -1;
+const slots = () => 5 + ui.lvl.v;
+
+const PRESETS = {
+  Starter: ['BOLT'],
+  Shotgun: ['AMP', 'SPLIT', 'SPLIT', 'BOLT', 'NEAR', 'NOVA'],
+  Thermostat: ['HOT', 'VENT', 'AMP', 'SPLIT', 'DRILL', 'LANCE', 'NEAR', 'NOVA'],
+};
+
+/** Group the tape into statements: any prefix of flow/mod ops, closed by an action. */
+function compile() {
+  stmts = [];
+  let cur = { ops: [], conds: [], mods: [], rep: 1, act: null };
+  tape.forEach((id, i) => {
+    const O = OPS[id];
+    cur.ops.push(i);
+    if (O.k === 'mod') cur.mods.push(id);
+    else if (id === 'X2') cur.rep *= 2;
+    else if (O.k === 'flow') cur.conds.push(O);
+    else { cur.act = id; stmts.push(cur); cur = { ops: [], conds: [], mods: [], rep: 1, act: null }; }
+  });
+  if (cur.ops.length) stmts.push(cur);
+  pc = 0;
+}
+
+function perform(id, mods) {
+  const p = range.p, c = (m) => mods.filter((x) => x === m).length;
+  const mul = Math.pow(1.8, c('AMP')), sp = c('SPLIT'), n = Math.min(27, Math.pow(3, sp)), part = Math.pow(0.75, sp);
+  const drill = c('DRILL'), burst = c('BURST'), seek = c('SEEK');
+  const pop = (dmg) => (burst ? (e) => range.blast(e.x, e.y, 42, dmg * 0.5 * burst) : null);
+  if (id === 'BOLT') {
+    const a = range.aim(p.x, p.y), dmg = 10 * mul * part;
+    for (let i = 0; i < n; i++) range.shoot({ a: a + (i - (n - 1) / 2) * 0.13, dmg, pierce: drill * 3, homing: seek * 5, r: 3 + Math.sqrt(dmg) * 0.4, onHit: pop(dmg) });
+  } else if (id === 'NOVA') {
+    const dmg = 12 * mul * (1 + 0.4 * sp) * (1 + 0.25 * drill), r = 85 * (1 + 0.3 * sp);
+    range.blast(p.x, p.y, r, dmg, '#5ff4ff');
+    if (burst) range.after(0.2, () => range.blast(range.p.x, range.p.y, r * 1.2, dmg * 0.5 * burst));
+  } else if (id === 'LANCE') {
+    const a = range.aim(p.x, p.y), dmg = 24 * mul * part * (1 + 0.25 * drill);
+    for (let i = 0; i < n; i++) range.beam(p.x, p.y, a + (i - (n - 1) / 2) * 0.16, 340, dmg);
+    const e = burst && range.nearest(p.x, p.y, 340);
+    if (e) range.blast(e.x, e.y, 50, dmg * 0.5 * burst);
+  } else if (id === 'MINE') {
+    const dmg = 30 * mul * part * (1 + 0.25 * drill);
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU), d = n > 1 ? rand(30, 90) : 0;
+      range.shoot({ x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d, speed: 0, r: 7, life: 8, dmg: 0, color: '#ffd23c',
+        onHit: (e, s) => range.blast(s.x, s.y, 58 * (burst ? 1.4 : 1), dmg, '#ffd23c') });
+    }
+  } else range.fx.push({ kind: 'ring', x: p.x, y: p.y, r: 40, life: 0.3, max: 0.3, color: '#3dffea' });
+}
+
+/** Run the statement at `pc`; returns the cycles it costs. */
+function exec() {
+  const s = stmts[pc];
+  running = pc;
+  pc = (pc + 1) % stmts.length;
+  s.skipped = !s.act || !s.conds.every((o) => o.test());
+  if (s.skipped) return 1;
+  const A = OPS[s.act];
+  for (let r = 0; r < s.rep; r++) range.after((r * A.cyc) / CLOCK, () => perform(s.act, s.mods));
+  heat = clamp(heat + (A.heat < 0 ? A.heat : A.heat * (1 + 0.5 * s.mods.length)) * s.rep, 0, 150);
+  return s.mods.length + A.cyc * s.rep;
+}
+
+range.onTick = (dt) => {
+  heat = Math.max(0, heat - 12 * dt);
+  if (heat >= 100) throttled = true; else if (heat < 60) throttled = false;
+  if (!stmts.length) return;
+  wait -= dt * CLOCK * (throttled ? 0.5 : 1);
+  let guard = 0;
+  while (wait <= 0 && guard++ < 8) { wait += exec(); mark(); }
+};
+
+const pal = palette(OPS, 'BOLT', (k) => { if (tape.length < slots()) { tape.push(k); render(); } });
+const tapeEl = h('div', { class: 'tape' });
+const heatFill = h('i', {});
+const info = h('div', { class: 'info' });
+ui.left.append(
+  h('div', { class: 'bar' }, 'LOAD', Object.keys(PRESETS).map((n) => h('button', { onclick: () => { tape = PRESETS[n].slice(); render(); } }, n)),
+    h('button', { onclick: () => { tape = []; render(); } }, 'Clear')),
+  pal.el, tapeEl, h('div', { class: 'heat' }, heatFill, h('u', {})), info);
+
+function render() {
+  compile();
+  tapeEl.replaceChildren();
+  for (const s of stmts) {
+    tapeEl.append(h('div', { class: 'stmt' }, s.ops.map((i) => {
+      const O = OPS[tape[i]];
+      return h('div', { class: 'op', draggable: 'true', style: { '--k': O.col }, title: O.desc,
+        onclick: () => { tape.splice(i, 1); render(); },
+        ondragstart: () => { drag = i; },
+        ondragover: (e) => e.preventDefault(),
+        ondrop: (e) => { e.preventDefault(); if (drag < 0 || drag === i) return; const [m] = tape.splice(drag, 1); tape.splice(i, 0, m); drag = -1; render(); },
+      }, O.name);
+    })));
+  }
+  for (let i = tape.length; i < slots(); i++) tapeEl.append(h('span', { class: 'free' }, '·'));
+  let cyc = 0, ht = 0;
+  for (const s of stmts) {
+    if (!s.act) { cyc += 1; continue; }
+    const A = OPS[s.act];
+    cyc += s.mods.length + A.cyc * s.rep;
+    ht += (A.heat < 0 ? A.heat : A.heat * (1 + 0.5 * s.mods.length)) * s.rep;
+  }
+  const sec = cyc / CLOCK, net = ht - 12 * sec, dangling = stmts.some((s) => !s.act);
+  info.innerHTML = `SLOTS <b class="${tape.length > slots() ? 'warn' : ''}">${tape.length}/${slots()}</b> &nbsp; FULL LOOP <b>${cyc} cycles</b> (${sec.toFixed(1)} s)` +
+    ` &nbsp; HEAT PER LOOP <b class="${net > 0 ? 'warn' : ''}">${net > 0 ? '+' : ''}${net.toFixed(0)}</b> <small>(if every IF passes)</small><br>` +
+    (dangling ? '<span class="warn">The last ops have no action after them — they do nothing.</span>' : '');
+}
+function mark() {
+  [...tapeEl.querySelectorAll('.stmt')].forEach((el, i) => {
+    el.classList.toggle('run', i === running);
+    el.classList.toggle('skip', i === running && stmts[i].skipped);
+  });
+}
+range.onFrame = () => {
+  heatFill.style.width = (heat / 150) * 100 + '%';
+  heatFill.style.opacity = throttled ? (Math.sin(range.t * 20) > 0 ? 1 : 0.4) : 1;
+};
+
+tape = PRESETS.Starter.slice();
+render();
+range.start();
+</script>
+</body>
+</html>

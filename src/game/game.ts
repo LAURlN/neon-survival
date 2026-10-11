@@ -1,8 +1,10 @@
 /**
  * One run of the game: owns all world state and the per-frame update.
- * Spells talk to the world exclusively through the helpers on this class
- * (hit / explode / spawnProjectile / addZone / addBeam / after / fx...).
+ * Weapons talk to the world exclusively through the helpers on this class
+ * (hit / explode / strikeLine / spawnProjectile / addZone / addBeam / after / fx...).
  */
+import { Board } from '../circuit/board';
+import { fireWeapon } from '../circuit/weapons';
 import { GAME } from '../data/tuning';
 import type { Sfx } from '../engine/audio';
 import { Grid } from '../engine/grid';
@@ -20,6 +22,8 @@ export interface ExplodeOpts {
   knockback?: number;
   /** Skip the default ring / burst visuals. */
   quiet?: boolean;
+  /** Called for every enemy caught in the blast, after the damage. */
+  onHit?: (e: Enemy) => void;
 }
 
 export class Game {
@@ -33,6 +37,8 @@ export class Game {
   readonly player: Player;
   readonly progression: Progression;
   readonly director: Director;
+  /** The player's circuit: the only thing that attacks. */
+  readonly board = Board.starter();
 
   enemies: Enemy[] = [];
   projectiles: Projectile[] = [];
@@ -51,10 +57,10 @@ export class Game {
   pendingLevelUps = 0;
   pendingChests = 0;
 
-  /** Temporary modifiers that spells switch on and off. */
+  /** Temporary global modifiers. */
   buffs = { atkAmp: 0, cdMult: 1, manaMult: 1, enemySlow: 0, enemyHpCut: 0 };
 
-  /** Total damage dealt per spell key, shown on the result screen. */
+  /** Total damage dealt per weapon key, shown on the result screen. */
   damageBy = new Map<string, number>();
   shake = 0;
   /** Sound hook; main.ts points this at the audio engine. A no-op keeps the game headless-friendly. */
@@ -69,7 +75,7 @@ export class Game {
     this.player = new Player(this);
     this.progression = new Progression(this);
     this.director = new Director(this);
-    this.progression.learnSpell(1); // Everyone starts with Magic Bolt.
+    this.board.fire = (s, _tile, shot) => (shot ? this.after(shot * 0.12, () => fireWeapon(this, s)) : fireWeapon(this, s));
     // Like the original, a few orbs wait around the start position.
     for (let i = 0; i < 10; i++) {
       const a = rand(0, TAU);
@@ -85,7 +91,7 @@ export class Game {
     return GAME.baseAtk * s.mult('atk') * s.mult('atkAmp') * (1 + this.buffs.atkAmp / 100);
   }
 
-  /** Multiplier applied to every spell cooldown. */
+  /** Multiplier applied to how long reactors take between sparks. */
   get cooldownMult(): number {
     return this.stats.mult('cd', -75) * this.buffs.cdMult;
   }
@@ -115,7 +121,11 @@ export class Game {
     this.director.update(dt);
     this.grid.rebuild(this.enemies);
     this.updateEnemies(dt);
-    for (const spell of this.progression.spells.values()) spell.update(dt);
+    const b = this.board;
+    b.rate = this.cooldownMult;
+    b.sense.moving = this.player.moving;
+    b.sense.near = this.nearest(this.player.x, this.player.y, GAME.nearRange) !== null;
+    b.update(dt);
     this.updateProjectiles(dt);
     this.updateZones(dt);
     this.updateBeams(dt);
@@ -150,6 +160,15 @@ export class Game {
       e.flash -= dt;
       e.touchT -= dt;
       e.wobble += dt;
+      e.chill -= dt;
+      if (e.burnT > 0) {
+        e.burnT -= dt;
+        if ((e.burnAcc += dt) >= 0.5) {
+          e.burnAcc -= 0.5;
+          this.hit(e, e.burn * 0.5, 'burn', false);
+          if (e.dead) continue;
+        }
+      } else e.burn = 0;
 
       let dx = p.x - e.x;
       let dy = p.y - e.y;
@@ -169,7 +188,7 @@ export class Game {
       if (e.frozen > 0) {
         e.frozen -= dt;
       } else {
-        let sp = e.speed * speedMult;
+        let sp = e.speed * speedMult * (e.chill > 0 ? GAME.chillSlow : 1);
         // Rushers (trait 2) keep pace with the pack, then lunge once they are close.
         if (e.def.traits.includes(2)) {
           e.dashT -= dt;
@@ -300,6 +319,7 @@ export class Game {
       this.after(0.05, () => this.explode(x, y, 70, this.atk * 0.75, 'artifact', '#ffb347'));
     }
     this.player.onKill();
+    this.board.trigger('kill');
   }
 
   /** Instant area damage. */
@@ -319,7 +339,19 @@ export class Game {
         e.ky += ((e.y - y) / d) * opts.knockback;
       }
       this.hit(e, dmg, src);
+      opts.onHit?.(e);
     });
+  }
+
+  /** Instant damage to everything within `width` of a line, drawn as a flash of light. */
+  strikeLine(x1: number, y1: number, x2: number, y2: number, width: number, dmg: number, src: string, color: string,
+             onHit?: (e: Enemy) => void) {
+    this.fx.push({ kind: 'lightning', x: x1, y: y1, r: width * 0.7, life: 0.2, maxLife: 0.2, color, pts: [x1, y1, x2, y2] });
+    for (const e of this.enemies) {
+      if (e.dead || distToSegment2(e.x, e.y, x1, y1, x2, y2) > (width + e.r) ** 2) continue;
+      this.hit(e, dmg, src);
+      onHit?.(e);
+    }
   }
 
   /** Nearest live enemy to a point within `maxR`, optionally skipping some. */
@@ -496,7 +528,9 @@ export class Game {
         const ey = b.y + Math.sin(b.angle) * b.len;
         for (const e of this.enemies) {
           if (e.dead) continue;
-          if (distToSegment2(e.x, e.y, b.x, b.y, ex, ey) <= (b.width + e.r) ** 2) this.hit(e, b.dmg, b.src);
+          if (distToSegment2(e.x, e.y, b.x, b.y, ex, ey) > (b.width + e.r) ** 2) continue;
+          this.hit(e, b.dmg, b.src);
+          b.onHit?.(e);
         }
       }
       if (b.life <= 0) b.dead = true;
@@ -553,7 +587,6 @@ export class Game {
       this.sound('pick');
       this.fx.push({ kind: 'ring', x: p.x, y: p.y, r: 16, life: 0.16, maxLife: 0.16, color: '#4da3ff' });
       this.gainXp(it.value);
-      this.progression.onManaOrb();
     } else if (it.kind === 'life') {
       p.heal((p.maxHp * GAME.lifeOrbHeal * this.stats.mult('orbHeal')) / 100);
       this.ring(p.x, p.y, 40, '#7dff9a', 0.4);

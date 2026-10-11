@@ -4,6 +4,7 @@ import { AudioEngine } from './engine/audio';
 import { Input } from './engine/input';
 import { Game } from './game/game';
 import { Renderer } from './render/renderer';
+import { BoardEditor } from './ui/editor';
 import { UI } from './ui/ui';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -11,6 +12,7 @@ const input = new Input(canvas);
 const renderer = new Renderer(canvas);
 const ui = new UI();
 const audio = new AudioEngine();
+const editor = new BoardEditor();
 
 let game: Game | null = null;
 /** True while the simulation should advance. */
@@ -43,11 +45,28 @@ function pause() {
   running = false;
   input.reset();
   audio.setPaused(true);
-  ui.showPause(game, () => {
+  const resume = () => {
     ui.close();
     audio.setPaused(false);
     running = true;
+  };
+  ui.showPause(game, resume, () => {
+    resume();
+    openEditor();
   }, toTitle);
+}
+
+/** Pause the run and open the circuit editor; closing it resumes. */
+function openEditor() {
+  if (!game || !running) return;
+  running = false;
+  input.reset();
+  audio.setPaused(true);
+  editor.open(game.board, () => {
+    input.reset();
+    audio.setPaused(false);
+    running = true;
+  });
 }
 
 /** Hand out any pending level-ups and chests, one choice screen at a time. */
@@ -99,11 +118,15 @@ function frame(now: number) {
 }
 
 ui.onPause = pause;
+ui.onCircuit = openEditor;
+editor.sfx = (name) => audio.play(name);
 ui.onMute = () => audio.toggleMute();
 ui.sfx = (name) => audio.play(name);
 ui.setMuted(audio.muted);
 window.addEventListener('keydown', (e) => {
+  if (editor.isOpen || e.repeat) return;
   if (e.code === 'Escape' || e.code === 'KeyP') pause();
+  else if (e.code === 'KeyE') openEditor();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) pause();

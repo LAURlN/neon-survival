@@ -74,7 +74,7 @@ export class Director {
       hp, maxHp: hp,
       atk: def.atk * (1 + GAME.enemyAtkGrowth * minute),
       speed: def.speed * GAME.enemySpeedScale * rand(0.92, 1.08),
-      frozen: 0, kx: 0, ky: 0, flash: 0, touchT: 0, hitT: {}, hits: 0, melt: 0,
+      frozen: 0, kx: 0, ky: 0, flash: 0, touchT: 0, hitT: {}, hits: 0, melt: 0, burn: 0, burnT: 0, burnAcc: 0, chill: 0,
       dashT: rand(0, 2), wobble: rand(0, 10), dead: false,
     };
     g.enemies.push(e);

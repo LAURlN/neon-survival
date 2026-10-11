@@ -82,7 +82,7 @@ body {
 
 #topbar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr auto auto;
+  grid-template-columns: 1fr auto 1fr auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 8px 10px 4px;
@@ -115,7 +115,8 @@ body {
 }
 
 #pause,
-#mute {
+#mute,
+#circuit {
   pointer-events: auto;
   width: 38px;
   height: 38px;
@@ -126,48 +127,44 @@ body {
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
 }
 
+#circuit {
+  position: relative;
+  font-size: 18px;
+}
+
+/* Spare tiles waiting to be placed. */
+#circuit.has {
+  color: var(--yellow);
+  border-color: var(--yellow);
+  animation: nudge 1.4s ease-in-out infinite;
+}
+
+#spares {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  min-width: 16px;
+  padding: 0 3px;
+  font: 800 10px/16px var(--mono);
+  font-style: normal;
+  color: #04121a;
+  background: var(--yellow);
+}
+
+#spares:empty {
+  display: none;
+}
+
+@keyframes nudge {
+  50% {
+    filter: drop-shadow(0 0 8px var(--yellow));
+  }
+}
+
 #mute.off {
   color: var(--dim);
   border-color: var(--line);
   text-decoration: line-through;
-}
-
-#loadout {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 2px 10px;
-}
-
-.chip {
-  --cd: 0;
-  position: relative;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--c);
-  background: rgba(6, 8, 18, 0.8);
-  border: 1.5px solid var(--c);
-  box-shadow: 0 0 8px -1px var(--c), inset 0 0 6px -2px var(--c);
-  transform: rotate(45deg);
-  margin: 4px;
-}
-
-/* Cooldown sweep. */
-.chip::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: conic-gradient(from -45deg, rgba(0, 0, 0, 0.7) calc(var(--cd) * 360deg), transparent 0);
-}
-
-.chip span {
-  position: relative;
-  z-index: 1;
-  transform: rotate(-45deg);
 }
 
 #announce {
@@ -478,7 +475,136 @@ h2.danger {
   text-shadow: 0 0 10px rgba(255, 210, 60, 0.7);
 }
 
+/* ---- circuit editor ----------------------------------------------------- */
+
+#editor {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--safe-top) 0 var(--safe-bottom);
+  background: #05060c;
+}
+
+.ed-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ed-done {
+  padding: 8px 18px;
+  font-size: 13px;
+}
+
+#editor canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.ed-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  min-height: 62px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dim);
+}
+
+.ed-text {
+  flex: 1;
+}
+
+.ed-text b {
+  font-size: 13px;
+}
+
+.ed-act {
+  font: 700 12px var(--mono);
+  color: var(--cyan);
+  background: var(--panel);
+  border: 1px solid var(--cyan);
+  padding: 10px;
+  white-space: nowrap;
+}
+
+.ed-act:disabled {
+  color: var(--line);
+  border-color: var(--line);
+}
+
+.ed-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  max-height: 182px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  background: rgba(12, 15, 30, 0.9);
+}
+
+.ed-tile {
+  position: relative;
+  flex: none;
+  width: 66px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  font: inherit;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 9%, #080a14);
+  border: 1.5px solid var(--c);
+  border-top: 4px solid var(--r);
+}
+
+.ed-tile b {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.ed-tile span {
+  font-size: 9px;
+  line-height: 1.1;
+  color: var(--dim);
+  text-align: center;
+}
+
+.ed-tile i {
+  position: absolute;
+  top: 1px;
+  right: 4px;
+  font: 800 11px var(--mono);
+  color: var(--text);
+}
+
+.ed-tile.on {
+  background: color-mix(in srgb, var(--c) 30%, #080a14);
+  box-shadow: 0 0 14px -2px var(--c);
+}
+
+.ed-tile.on span {
+  color: var(--text);
+}
+
+.ed-empty {
+  color: var(--dim);
+  font-size: 12px;
+  padding: 26px 4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  #circuit.has,
   .panel,
   .glitch::before,
   .glitch::after,

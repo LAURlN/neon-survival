@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build lab — five concepts</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+  body { user-select: text; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 18px 40px; }
+  h1 { font-size: 22px; letter-spacing: 0.16em; margin: 0 0 4px; color: #fff; text-shadow: 0 0 14px #5ff4ff; }
+  .lead { color: var(--dim); max-width: 780px; margin: 0 0 20px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+  .card { display: block; border: 1px solid var(--line); border-left: 4px solid var(--k); background: var(--panel); padding: 14px 16px; color: var(--text); text-decoration: none; }
+  .card:hover { border-color: var(--k); box-shadow: 0 0 18px -6px var(--k); }
+  .card h2 { margin: 0; font-size: 17px; letter-spacing: 0.14em; color: var(--k); }
+  .card .model { color: var(--dim); margin-bottom: 8px; }
+  .card p { margin: 6px 0; }
+  .card dl { margin: 8px 0 0; display: grid; grid-template-columns: 78px 1fr; gap: 3px 10px; font-size: 12px; }
+  .card dt { color: var(--k); }
+  .card dd { margin: 0; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>BUILD LAB</h1>
+  <p class="lead">Five ways to replace "pick one of three spells" with actually building your character. Each demo is only the
+    building system plus a test range, so the idea can be judged on its own. Every page has presets, a run-level stepper that
+    grows your budget the way a run would, and a pressure control for the range.</p>
+  <div class="cards">
+    <a class="card" href="frame.html" style="--k:#5ff4ff">
+      <h2>1 · FRAME</h2><div class="model">Build the body — you think in shapes</div>
+      <p>Bolt parts onto a core. A gun shoots the way it points, from where it sits. Mass slows you, armor and blades decide what happens when something touches that side.</p>
+      <dl><dt>Easy in</dt><dd>Stick a gun on the front. Done.</dd>
+        <dt>Ceiling</dt><dd>Firing lines, adjacency boosts, power, mass against speed, and a hitbox you drew yourself.</dd>
+        <dt>Expression</dt><dd>Ships look and handle differently: broadside, ram, glass needle, fortress.</dd>
+        <dt>Risk</dt><dd>Facing follows movement, so on a phone joystick aiming and dodging fight each other.</dd></dl>
+    </a>
+    <a class="card" href="circuit.html" style="--k:#ffe93c">
+      <h2>2 · CIRCUIT</h2><div class="model">Route the energy — you think in flow</div>
+      <p>Reactors throw pulses across a board. Mirrors, splitters, capacitors and elements reshape them on the way to an emitter, which turns whatever arrives into an attack.</p>
+      <dl><dt>Easy in</dt><dd>Reactor, straight line, blaster.</dd>
+        <dt>Ceiling</dt><dd>Timing, merging, order of operations, sharing one pulse stream between several emitters.</dd>
+        <dt>Expression</dt><dd>You can watch the machine think. Boards are readable and very different from each other.</dd>
+        <dt>Risk</dt><dd>Needs board space; fiddly on a small screen unless the board stays small.</dd></dl>
+    </a>
+    <a class="card" href="kernel.html" style="--k:#b48cff">
+      <h2>3 · KERNEL</h2><div class="model">Program the weapon — you think in sequence</div>
+      <p>A clock walks a tape of instructions. Modifiers stack onto the next action, IF and ×2 control it, and heat punishes programs that never breathe.</p>
+      <dl><dt>Easy in</dt><dd>One instruction is already a working weapon.</dd>
+        <dt>Ceiling</dt><dd>Conditionals, burst against sustain, heat management, cycle counting.</dd>
+        <dt>Expression</dt><dd>Programs that react: one thing up close, another at range, a finisher after a kill.</dd>
+        <dt>Risk</dt><dd>Reads as "coding"; the best line is often simply the longest modifier chain.</dd></dl>
+    </a>
+    <a class="card" href="sequencer.html" style="--k:#ff2bd6">
+      <h2>4 · SEQUENCER</h2><div class="model">Compose the loop — you think in rhythm</div>
+      <p>Each track is a weapon, each lit step fires it, and each weapon rewards a different rhythm. The build is the soundtrack: you hear your damage.</p>
+      <dl><dt>Easy in</dt><dd>Click squares, something happens on the beat.</dd>
+        <dt>Ceiling</dt><dd>A fixed note budget against four conflicting rhythm rules, plus timing bursts to enemy waves.</dd>
+        <dt>Expression</dt><dd>Highest of the five. Every player's run sounds different.</dd>
+        <dt>Risk</dt><dd>Needs sound on to shine; depth lives in the rhythm rules, which need careful design.</dd></dl>
+    </a>
+    <a class="card" href="nest.html" style="--k:#ff9a3c">
+      <h2>5 · NEST</h2><div class="model">Nest the triggers — you think in consequences</div>
+      <p>Every part has a socket that holds another part, released when its trigger happens: on hit, on kill, every half second. A weapon is a chain of "when this, then that".</p>
+      <dl><dt>Easy in</dt><dd>One part fires. Put a second inside it.</dd>
+        <dt>Ceiling</dt><dd>Chain reactions that only pay off if each step lands; cost against reliability.</dd>
+        <dt>Expression</dt><dd>Grenades, cluster missiles, drifting batteries, kill-fed explosions.</dd>
+        <dt>Risk</dt><dd>Runaway screens full of projectiles; hardest to balance and to keep fast on a phone.</dd></dl>
+    </a>
+  </div>
+</div>
+</body>
+</html>
