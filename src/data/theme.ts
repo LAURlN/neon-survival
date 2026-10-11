@@ -13,6 +13,7 @@ export const VOCAB = {
   passive: 'Upgrade',
   artifact: 'cyberware',
   chest: 'DATA CACHE',
+  legendary: 'LEGENDARY CACHE',
   levelUp: 'LEVEL',
   over: 'CONNECTION LOST',
 };

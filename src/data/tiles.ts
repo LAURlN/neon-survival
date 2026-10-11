@@ -5,7 +5,7 @@
  * circuit/board.ts) and the remaining fields are that behaviour's parameters.
  * To add a tile that reuses an existing behaviour, add an entry here and
  * nothing else. Rarity decides where it drops: 0-1 from level-ups, 2+ from
- * data caches.
+ * data caches. Legendary tiles (4) are what a boss cache offers.
  */
 import type { Element, Mode, Shape } from '../circuit/spark';
 
@@ -59,7 +59,7 @@ export const RARITY = [
   { name: 'Uncommon', color: '#7dff9a', weight: 0 },
   { name: 'Rare', color: '#6edcff', weight: 60 },
   { name: 'Epic', color: '#c58cff', weight: 30 },
-  { name: 'Legendary', color: '#ffb347', weight: 10 },
+  { name: 'Legendary', color: '#ffb347', weight: 4 },
 ];
 
 export const CAT_LABEL: Record<TileCat, string> = {
@@ -134,9 +134,9 @@ const defs: TileDef[] = [
   { id: 'prism', name: 'Prism', glyph: '⟁', rarity: 2, cat: 'route', op: 'split', n: 3, mult: 0.45,
     desc: 'Three sparks out — straight and both sides — at 45% each (a third each on repeat passes).' },
   { id: 'multi', name: 'Duplicator', glyph: '⧉', rarity: 2, cat: 'boost', op: 'count', mult: 0.75, n: 4,
-    desc: '+1 projectile, each at 75% energy. Stacks up to 4 projectiles.' },
+    desc: '+1 projectile, each at 75% energy. A spark can carry at most 4 projectiles.' },
   { id: 'lens', name: 'Crit Lens', glyph: '◈', rarity: 2, cat: 'boost', op: 'boost', mult: 2.5, chance: 0.3, n: 1,
-    desc: '30% chance to multiply a spark by ×2.5. No recharge.' },
+    desc: 'One roll per spark: 30% chance to multiply it by ×2.5. No recharge.' },
   { id: 'quick', name: 'Pulse Reactor', glyph: '⚡', rarity: 2, cat: 'source', op: 'source', turn: 'dir', energy: 6, ticks: 3,
     trigger: 'clock', desc: 'Throws a 6-energy spark every 0.3 s.' },
   { id: 'pain', name: 'Pain Tap', glyph: '♥', rarity: 2, cat: 'source', op: 'source', turn: 'dir', energy: 70, ticks: 5,
@@ -156,9 +156,17 @@ const defs: TileDef[] = [
   { id: 'killtap', name: 'Kill Tap', glyph: '☠', rarity: 3, cat: 'source', op: 'source', turn: 'dir', energy: 14, ticks: 5,
     trigger: 'kill', desc: 'Throws a 14-energy spark when you kill (up to 2 per second).' },
   { id: 'chaos', name: 'Chaos Lens', glyph: '✹', rarity: 3, cat: 'element', op: 'element', element: 'random', mult: 1.3,
-    desc: 'Gives each spark a random element and ×1.3 energy.' },
+    desc: 'Gives each spark a random element and ×1.3 energy (the energy once per spark).' },
   { id: 'fusion', name: 'Fusion Core', glyph: '☢', rarity: 4, cat: 'source', op: 'source', turn: 'dir', energy: 45, ticks: 10,
     trigger: 'clock', desc: 'Throws a 45-energy spark every second.' },
+  { id: 'cloner', name: 'Cloner', glyph: '⧓', rarity: 4, cat: 'route', op: 'split', n: 2, mult: 1,
+    desc: 'Two sparks out sideways at FULL energy each (half each on repeat passes).' },
+  { id: 'hyper', name: 'Hyper Amp', glyph: '✚', rarity: 4, cat: 'boost', op: 'boost', mult: 3, ticks: 10, n: 1,
+    desc: '×3 energy, once per spark. Needs 1 s to recharge.' },
+  { id: 'tesseract', name: 'Tesseract Cell', glyph: '▣', rarity: 4, cat: 'boost', op: 'bank', turn: 'dir', n: 2, mult: 1.8,
+    desc: 'Banks 2 sparks and releases one with their energy ×1.8. The bonus applies once per spark.' },
+  { id: 'trinity', name: 'Trinity Emitter', glyph: '◉', rarity: 4, cat: 'emit', op: 'emit', mult: 0.65, repeat: 3,
+    desc: 'Fires three times, each shot at 65%.' },
   { id: 'omni', name: 'Singularity Emitter', glyph: '◉', rarity: 4, cat: 'emit', op: 'emit', mult: 1.6,
     desc: 'Fires at ×1.6 power.' },
 ];

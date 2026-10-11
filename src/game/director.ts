@@ -2,6 +2,7 @@
 import { ENEMY_COLORS } from '../data/theme';
 import { BOSSES, GAME, WAVES, type Wave } from '../data/tuning';
 import { TAU, clamp, pick, rand } from '../engine/math';
+import { makeBoss } from './boss';
 import { ENEMIES } from './content';
 import type { Game } from './game';
 import type { Enemy, EnemyKind } from './types';
@@ -30,13 +31,14 @@ export class Director {
 
     if (minute >= (this.bossesSpawned + 1) * BOSSES.every) {
       const id = BOSSES.ids[this.bossesSpawned % BOSSES.ids.length];
-      this.bossesSpawned++;
       const boss = this.spawn(id, 'boss');
       if (boss) {
-        this.announce = { text: `${boss.def.name} approaches`, t: 3.5 };
+        boss.boss = makeBoss(this.bossesSpawned);
+        this.announce = { text: `${boss.boss.name} inbound`, t: 3.5 };
         g.shake = 8;
         g.sound('boss');
       }
+      this.bossesSpawned++;
     }
 
     this.timer -= dt;
@@ -51,7 +53,13 @@ export class Director {
     }
   }
 
-  spawn(id: number, kind: EnemyKind): Enemy | null {
+  /** An ordinary hostile of the current wave. */
+  minionId(): number {
+    return pick(this.wave.ids);
+  }
+
+  /** Spawn an enemy just off screen, or at `at` if given. */
+  spawn(id: number, kind: EnemyKind, at?: { x: number; y: number }): Enemy | null {
     const def = ENEMIES.get(id);
     if (!def) return null;
     const g = this.g;
@@ -68,12 +76,12 @@ export class Director {
       def, kind,
       color: kind === 'boss' ? '#ff2e4d' : ENEMY_COLORS[def.id % ENEMY_COLORS.length],
       shape: def.id % 5,
-      x: g.player.x + Math.cos(angle) * dist,
-      y: g.player.y + Math.sin(angle) * dist,
+      x: at?.x ?? g.player.x + Math.cos(angle) * dist,
+      y: at?.y ?? g.player.y + Math.sin(angle) * dist,
       r: clamp(7 + Math.sqrt(def.hp) * 0.55, 10, 62),
       hp, maxHp: hp,
       atk: def.atk * (1 + GAME.enemyAtkGrowth * minute),
-      speed: def.speed * GAME.enemySpeedScale * rand(0.92, 1.08),
+      speed: def.speed * GAME.enemySpeedScale * rand(0.92, 1.08), speedMul: 1,
       frozen: 0, kx: 0, ky: 0, flash: 0, touchT: 0, hitT: {}, hits: 0, melt: 0, burn: 0, burnT: 0, burnAcc: 0, chill: 0,
       dashT: rand(0, 2), wobble: rand(0, 10), dead: false,
     };

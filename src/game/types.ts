@@ -1,3 +1,4 @@
+import type { BossState } from './boss';
 import type { EnemyDef } from './content';
 import type { Game } from './game';
 
@@ -17,6 +18,10 @@ export interface Enemy {
   maxHp: number;
   atk: number;
   speed: number;
+  /** Extra movement multiplier (bosses stop while winding up an attack). */
+  speedMul: number;
+  /** Present on bosses: their attack pattern and its timers. */
+  boss?: BossState;
   /** Seconds of freeze / stun remaining (cannot move or attack). */
   frozen: number;
   /** Knockback velocity, decays quickly. */
@@ -130,7 +135,7 @@ export interface Beam {
   dead: boolean;
 }
 
-export type PickupKind = 'mana' | 'life' | 'chest' | 'magnet';
+export type PickupKind = 'mana' | 'life' | 'chest' | 'legend' | 'magnet';
 
 export interface Pickup {
   kind: PickupKind;

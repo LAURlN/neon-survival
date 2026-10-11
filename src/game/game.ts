@@ -10,6 +10,7 @@ import type { Sfx } from '../engine/audio';
 import { Grid } from '../engine/grid';
 import type { Input } from '../engine/input';
 import { TAU, chance, clamp, dist2, distToSegment2, rand } from '../engine/math';
+import { onBossDeath, updateBoss } from './boss';
 import { xpForLevel } from './content';
 import { Director } from './director';
 import { Player } from './player';
@@ -58,6 +59,7 @@ export class Game {
   /** Level-ups / chests waiting for the player to choose; the UI drains these. */
   pendingLevelUps = 0;
   pendingChests = 0;
+  pendingLegendary = 0;
 
   /** Temporary global modifiers. */
   buffs = { atkAmp: 0, cdMult: 1, manaMult: 1, enemySlow: 0, enemyHpCut: 0 };
@@ -72,6 +74,7 @@ export class Game {
   private nextChestAt = GAME.chestKills[0];
   private chestIndex = 0;
   private textBudget = 0;
+  private sparkBudget = 0;
 
   constructor(readonly input: Input) {
     this.player = new Player(this);
@@ -107,7 +110,8 @@ export class Game {
   update(dt: number) {
     if (this.over) return;
     this.time += dt;
-    this.textBudget = 10;
+    this.textBudget = GAME.textPerFrame;
+    this.sparkBudget = GAME.sparksPerFrame;
     this.shake = Math.max(0, this.shake - dt * 30);
 
     for (let i = this.timers.length - 1; i >= 0; i--) {
@@ -190,7 +194,8 @@ export class Game {
       if (e.frozen > 0) {
         e.frozen -= dt;
       } else {
-        let sp = e.speed * speedMult * (e.chill > 0 ? GAME.chillSlow : 1);
+        if (e.boss) updateBoss(this, e, dt);
+        let sp = e.speed * e.speedMul * speedMult * (e.chill > 0 ? GAME.chillSlow : 1);
         // Rushers (trait 2) keep pace with the pack, then lunge once they are close.
         if (e.def.traits.includes(2)) {
           e.dashT -= dt;
@@ -269,7 +274,7 @@ export class Game {
     e.hp -= d;
     e.flash = 0.09;
     this.sound('hit');
-    if (this.textBudget > 4) this.sparks(e.x, e.y, e.color, crit ? 4 : 1, 140);
+    if (this.sparkBudget-- > 0) this.sparks(e.x, e.y, e.color, crit ? 4 : 1, 140);
     this.damageBy.set(src, (this.damageBy.get(src) ?? 0) + Math.min(d, e.hp + d));
 
     if (this.textBudget > 0 && (crit || Math.random() < 0.35)) {
@@ -300,8 +305,9 @@ export class Game {
 
     if (e.kind === 'boss') {
       for (let i = 0; i < 24; i++) this.drop('mana', e.x + rand(-70, 70), e.y + rand(-70, 70), e.def.mana / 24);
-      this.drop('chest', e.x, e.y, 1);
+      this.drop('legend', e.x, e.y, 1);
       this.shake = 10;
+      onBossDeath(this, e);
     } else {
       this.drop('mana', e.x + rand(-5, 5), e.y + rand(-5, 5), e.def.mana);
       if (e.kind === 'elite') this.drop('chest', e.x, e.y, 1);
@@ -565,7 +571,7 @@ export class Game {
       if (it.dead) continue;
       it.age += dt;
       const d2 = dist2(p.x, p.y, it.x, it.y);
-      if (!it.pulled && d2 < range2 && it.kind !== 'chest') it.pulled = true;
+      if (!it.pulled && d2 < range2 && it.kind !== 'chest' && it.kind !== 'legend') it.pulled = true;
       if (it.pulled) {
         // A short hop away from the player, then a smooth accelerating dive in.
         it.pullT += dt;
@@ -597,8 +603,9 @@ export class Game {
       p.heal((p.maxHp * GAME.lifeOrbHeal * this.stats.mult('orbHeal')) / 100);
       this.ring(p.x, p.y, 40, '#7dff9a', 0.4);
       this.sound('heal');
-    } else if (it.kind === 'chest') {
-      this.pendingChests++;
+    } else if (it.kind === 'chest' || it.kind === 'legend') {
+      if (it.kind === 'legend') this.pendingLegendary++;
+      else this.pendingChests++;
       this.sound('chest');
     } else {
       for (const o of this.pickups) if (o.kind === 'mana') o.pulled = true;

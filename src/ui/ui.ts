@@ -61,6 +61,9 @@ export class UI {
   private readonly circuitBtn = $('circuit');
   private readonly spares = $('spares');
   private lastSpares = -1;
+  private lastXp = -1;
+  private lastLevel = -1;
+  private lastKills = -1;
   private lastSecond = -1;
 
   onPause: () => void = () => {};
@@ -92,19 +95,22 @@ export class UI {
 
   showHud(show: boolean) {
     this.hud.hidden = !show;
-    this.lastSecond = -1;
-    this.lastSpares = -1;
+    this.lastSecond = this.lastSpares = this.lastXp = this.lastLevel = this.lastKills = -1;
   }
 
   updateHud(g: Game) {
-    this.xpFill.style.width = `${Math.min(100, (g.xp / g.xpNeeded) * 100)}%`;
+    const xp = Math.round(Math.min(1, g.xp / g.xpNeeded) * 200) / 200;
+    if (xp !== this.lastXp) {
+      this.lastXp = xp;
+      this.xpFill.style.transform = `scaleX(${xp})`;
+    }
     const second = Math.floor(g.time);
     if (second !== this.lastSecond) {
       this.lastSecond = second;
       this.timer.textContent = formatTime(g.time);
     }
-    this.level.textContent = `Lv ${g.level}`;
-    this.kills.textContent = String(g.kills);
+    if (g.level !== this.lastLevel) this.level.textContent = `Lv ${(this.lastLevel = g.level)}`;
+    if (g.kills !== this.lastKills) this.kills.textContent = String((this.lastKills = g.kills));
 
     // The circuit button counts the tiles still waiting to be wired in.
     const spares = g.board.spares;

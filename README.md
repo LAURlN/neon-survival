@@ -28,7 +28,8 @@ open the circuit and place them. `Esc` / `P` pauses, `♪` mutes.
 
 | | Count | Where |
 |---|---|---|
-| Tiles | 42 (26 basic, 16 special) | `src/data/tiles.ts` |
+| Tiles | 46 (26 basic, 14 special, 6 legendary) | `src/data/tiles.ts` |
+| Bosses | 4 attack patterns, one every 5 minutes, each drops a legendary cache | `src/game/boss.ts`, `BOSSES` in `tuning.ts` |
 | Weapons | 20 (4 shapes × 5 types) | `src/data/weapons.ts`, `src/circuit/weapons.ts` |
 | Elements | 4 | `src/circuit/weapons.ts` |
 | Stat upgrades / cyberware | 9 / 53 | `game-data.json`, filtered by `src/game/effects.ts` |
@@ -69,6 +70,7 @@ src/
     game.ts          world state, update loop, damage, projectiles / zones / beams, pickups
     director.ts      enemy spawning
     player.ts        movement, HP, damage taken
+    boss.ts          boss attack patterns
     progression.ts   what level-ups and data caches offer
     effects.ts       effect id -> stat key table for upgrades and cyberware
     stats.ts         StatSheet: folds [effectId, value] pairs into flat / pct / mul buckets
@@ -98,6 +100,7 @@ through `fire`. Weapons know nothing about the board: they get a spark and call 
   `data/tuning.ts` (`energyDamage` scales all circuit damage at once).
 - **More cyberware** - add the missing effect ids to `src/game/effects.ts`; an item becomes available
   once every effect id it uses is known.
+- **A boss pattern** - add it to `BossPattern` and `BOSSES` in `tuning.ts`, and a `case` in `updateBoss`.
 - **Sound** - add a case to `AudioEngine.play` in `src/engine/audio.ts` and call `game.sound('name')`.
 
 ## Reverse-engineering notes

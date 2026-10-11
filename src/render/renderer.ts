@@ -3,11 +3,24 @@
  *
  * Glow is done with cached radial-gradient sprites blended additively
  * ("lighter"), which is far cheaper on phones than canvas shadowBlur.
+ * Anything that appears in large numbers (enemies, data shards) is drawn
+ * once into an offscreen sprite and then stamped, and the render resolution
+ * drops by itself on devices that cannot hold the frame rate (`adapt`).
  */
 import type { Input } from '../engine/input';
 import { TAU, clamp, hash2 } from '../engine/math';
 import type { Game } from '../game/game';
 import type { Enemy, Fx, Pickup, Projectile, Zone } from '../game/types';
+
+/** A pre-rendered image and half its size in world units. */
+interface Sprite {
+  canvas: HTMLCanvasElement;
+  half: number;
+}
+
+/** Data shard size and colour by value tier. */
+const SHARD_SIZE = [3.6, 5, 6.5];
+const SHARD_COLOR = ['#4da3ff', '#3dffea', '#ffd23c'];
 
 const BG = '#06070e';
 const BODY = '#0b0d18';
@@ -32,6 +45,14 @@ export class Renderer {
   zoom = 1;
 
   private glowCache = new Map<string, HTMLCanvasElement>();
+  /** Sprites are rendered at the current resolution, so a resize throws them away. */
+  private sprites = new Map<string, Sprite>();
+  private camX = 0;
+  private camY = 0;
+  /** Fraction of the full resolution currently rendered, and the frame-time tracking behind it. */
+  private quality = 1;
+  private avgMs = 16;
+  private slowFrames = 0;
   /** Recent player positions for the motion trail. */
   private trail: number[] = [];
 
@@ -42,13 +63,37 @@ export class Renderer {
   }
 
   resize() {
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2) * this.quality;
+    this.sprites.clear();
     this.w = window.innerWidth;
     this.h = window.innerHeight;
     this.canvas.width = Math.round(this.w * this.dpr);
     this.canvas.height = Math.round(this.h * this.dpr);
     // The short side of the screen always shows about 430 world units.
     this.zoom = clamp(Math.min(this.w, this.h) / 430, 0.7, 1.7);
+  }
+
+  /**
+   * Feed the real time between frames while a run is active. If the device stays
+   * well below 60 fps for a while, render at a lower resolution: on phones the
+   * cost is almost entirely pixels filled, so this is the lever that always works.
+   */
+  adapt(ms: number) {
+    if (ms > 250) return; // tab was in the background
+    this.avgMs += (ms - this.avgMs) * 0.05;
+    if (this.avgMs < 22) this.slowFrames = 0;
+    else if (++this.slowFrames > 90 && this.quality > 0.5) {
+      this.quality = Math.max(0.5, this.quality - 0.17);
+      this.slowFrames = 0;
+      this.avgMs = 16;
+      this.resize();
+    }
+  }
+
+  /** Restore the world-space transform (origin at the centre of the screen, following the camera). */
+  private setWorld() {
+    const s = this.dpr * this.zoom;
+    this.ctx.setTransform(s, 0, 0, s, (this.dpr * this.w) / 2 - this.camX * s, (this.dpr * this.h) / 2 - this.camY * s);
   }
 
   /** Soft radial glow sprite for a colour, created once. */
@@ -101,9 +146,9 @@ export class Renderer {
     ctx.fillStyle = BG;
     ctx.fillRect(0, 0, w, h);
 
-    // World space: origin at the centre of the screen, following the player.
-    ctx.setTransform(this.dpr * zoom, 0, 0, this.dpr * zoom, (this.dpr * w) / 2, (this.dpr * h) / 2);
-    ctx.translate(-camX, -camY);
+    this.camX = camX;
+    this.camY = camY;
+    this.setWorld();
 
     const left = camX - g.viewW / 2;
     const top = camY - g.viewH / 2;
@@ -120,7 +165,9 @@ export class Renderer {
     for (const it of g.pickups) if (visible(it.x, it.y, 20)) this.drawPickup(it, g.time, p.x, p.y);
 
     ctx.globalCompositeOperation = 'source-over';
-    for (const e of g.enemies) if (visible(e.x, e.y, e.r + 14)) this.drawEnemy(e, p.x, p.y, g.time);
+    for (const e of g.enemies) if (visible(e.x, e.y, e.r + 14)) this.drawEnemy(e, p.x, p.y);
+    this.setWorld();
+    for (const e of g.enemies) if (e.kind !== 'normal' && visible(e.x, e.y, e.r + 14)) this.drawEliteRing(e, g.time);
     this.drawBars(g);
 
     this.drawPlayer(g);
@@ -229,64 +276,118 @@ export class Renderer {
     }
   }
 
-  private drawEnemy(e: Enemy, px: number, py: number, time: number) {
-    const { ctx } = this;
-    const frozen = e.frozen > 0;
-    const color = frozen ? '#9ae8ff' : e.color;
-    const angle = Math.atan2(py - e.y, px - e.x);
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const pulse = frozen ? 1 : 1 + Math.sin(e.wobble * 7) * 0.05;
-    const r = e.r * pulse;
+  /**
+   * An enemy's body, glow and eye, drawn once into an offscreen canvas and then
+   * stamped with a single drawImage per enemy per frame. `state`: 0 normal,
+   * 1 hit flash, 2 frozen. The sprite points along +x.
+   */
+  private enemySprite(e: Enemy, state: number): Sprite {
+    const r = Math.round(e.r);
+    const key = `${e.shape}|${e.color}|${e.kind}|${state}|${r}`;
+    let sprite = this.sprites.get(key);
+    if (sprite) return sprite;
 
-    // Under-glow.
-    ctx.globalCompositeOperation = 'lighter';
-    this.glow(e.x, e.y, r * 2.1, color, e.kind === 'normal' ? 0.28 : 0.45);
-    ctx.globalCompositeOperation = 'source-over';
+    const half = r * 2.2;
+    const scale = this.dpr * this.zoom;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = Math.ceil(half * 2 * scale);
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(scale, scale);
+    ctx.translate(half, half);
+
+    const flash = state === 1;
+    const color = state === 2 ? '#9ae8ff' : e.color;
+    ctx.globalAlpha = e.kind === 'normal' ? 0.28 : 0.45;
+    ctx.drawImage(this.glowSprite(color), -r * 2.1, -r * 2.1, r * 4.2, r * 4.2);
+    ctx.globalAlpha = 1;
 
     const pts = SHAPES[e.shape];
     ctx.beginPath();
     for (let i = 0; i < pts.length; i += 2) {
-      const x = e.x + (pts[i] * cos - pts[i + 1] * sin) * r;
-      const y = e.y + (pts[i] * sin + pts[i + 1] * cos) * r;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      if (i === 0) ctx.moveTo(pts[i] * r, pts[i + 1] * r);
+      else ctx.lineTo(pts[i] * r, pts[i + 1] * r);
     }
     ctx.closePath();
     // Small hostiles flash solid white when hit; big ones only brighten, or they would strobe.
-    const flash = e.flash > 0;
-    ctx.fillStyle = flash ? (e.kind === 'normal' ? '#ffffff' : '#3a2140') : frozen ? '#12303f' : BODY;
+    ctx.fillStyle = flash ? (e.kind === 'normal' ? '#ffffff' : '#3a2140') : state === 2 ? '#12303f' : BODY;
     ctx.fill();
     ctx.strokeStyle = flash ? '#ffffff' : color;
     ctx.lineWidth = e.kind === 'boss' ? 3.5 : e.kind === 'elite' ? 2.8 : 1.8;
     ctx.lineJoin = 'round';
     ctx.stroke();
 
-    // Sensor "eye" towards the player.
+    // Sensor "eye", which ends up facing the player.
     if (!flash || e.kind !== 'normal') {
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(e.x + cos * r * 0.3, e.y + sin * r * 0.3, Math.max(1.6, r * 0.2), 0, TAU);
+      ctx.arc(r * 0.3, 0, Math.max(1.6, r * 0.2), 0, TAU);
       ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(e.x + cos * r * 0.3, e.y + sin * r * 0.3, Math.max(0.8, r * 0.08), 0, TAU);
+      ctx.arc(r * 0.3, 0, Math.max(0.8, r * 0.08), 0, TAU);
       ctx.fill();
     }
 
-    // Elites and bosses carry a rotating targeting ring.
-    if (e.kind !== 'normal') {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.7;
-      ctx.setLineDash([r * 0.5, r * 0.35]);
-      ctx.lineDashOffset = time * 30;
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, r * 1.35, 0, TAU);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.globalAlpha = 1;
-    }
+    sprite = { canvas, half };
+    this.sprites.set(key, sprite);
+    return sprite;
+  }
+
+  /** Stamp an enemy's sprite, rotated to face the player. Leaves the transform changed; see `setWorld`. */
+  private drawEnemy(e: Enemy, px: number, py: number) {
+    const frozen = e.frozen > 0;
+    const sprite = this.enemySprite(e, e.flash > 0 ? 1 : frozen ? 2 : 0);
+    const angle = Math.atan2(py - e.y, px - e.x);
+    const s = this.dpr * this.zoom;
+    const k = s * (frozen ? 1 : 1 + Math.sin(e.wobble * 7) * 0.05);
+    const cos = Math.cos(angle) * k;
+    const sin = Math.sin(angle) * k;
+    this.ctx.setTransform(cos, sin, -sin, cos, (e.x - this.camX) * s + (this.dpr * this.w) / 2,
+                          (e.y - this.camY) * s + (this.dpr * this.h) / 2);
+    this.ctx.drawImage(sprite.canvas, -sprite.half, -sprite.half, sprite.half * 2, sprite.half * 2);
+  }
+
+  /** Elites and bosses carry a rotating targeting ring. */
+  private drawEliteRing(e: Enemy, time: number) {
+    const { ctx } = this;
+    ctx.strokeStyle = e.frozen > 0 ? '#9ae8ff' : e.color;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.7;
+    ctx.setLineDash([e.r * 0.5, e.r * 0.35]);
+    ctx.lineDashOffset = time * 30;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, e.r * 1.35, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  /** A data shard with its glow, as a sprite. `tier`: 0 small, 1 medium, 2 large. */
+  private shardSprite(tier: number): Sprite {
+    const key = `shard|${tier}`;
+    let sprite = this.sprites.get(key);
+    if (sprite) return sprite;
+    const s = SHARD_SIZE[tier];
+    const half = s * 3.2;
+    const scale = this.dpr * this.zoom;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = Math.ceil(half * 2 * scale);
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(scale, scale);
+    ctx.translate(half, half);
+    ctx.globalAlpha = 0.6;
+    ctx.drawImage(this.glowSprite(SHARD_COLOR[tier]), -half, -half, half * 2, half * 2);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = SHARD_COLOR[tier];
+    ctx.beginPath();
+    ctx.moveTo(0, -s);
+    ctx.lineTo(s * 0.7, 0);
+    ctx.lineTo(0, s);
+    ctx.lineTo(-s * 0.7, 0);
+    ctx.fill();
+    sprite = { canvas, half };
+    this.sprites.set(key, sprite);
+    return sprite;
   }
 
   private drawPlayer(g: Game) {
@@ -360,12 +461,12 @@ export class Renderer {
     // Resting pickups bob; ones in flight do not, so their path stays clean.
     const y = it.pulled ? it.y : it.y + Math.sin(time * 4 + it.x) * 1.5;
     if (it.kind === 'mana') {
-      const big = it.value >= 40;
-      const mid = it.value >= 8;
+      const tier = it.value >= 40 ? 2 : it.value >= 8 ? 1 : 0;
       // Pop in when dropped.
       const pop = Math.min(1, it.age / 0.18);
-      const s = (big ? 6.5 : mid ? 5 : 3.6) * (pop < 1 ? pop * (2 - pop) * 1.15 : 1);
-      const color = big ? '#ffd23c' : mid ? '#3dffea' : '#4da3ff';
+      const k = pop < 1 ? pop * (2 - pop) * 1.15 : 1;
+      const s = SHARD_SIZE[tier] * k;
+      const color = SHARD_COLOR[tier];
       if (it.pulled && it.speed > 60) {
         // Streak behind a shard that is flying in.
         const d = Math.hypot(px - it.x, py - y) || 1;
@@ -381,31 +482,40 @@ export class Renderer {
         ctx.globalAlpha = 1;
         ctx.lineCap = 'butt';
       }
-      this.glow(it.x, y, s * 3.2, color, 0.6);
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(it.x, y - s);
-      ctx.lineTo(it.x + s * 0.7, y);
-      ctx.lineTo(it.x, y + s);
-      ctx.lineTo(it.x - s * 0.7, y);
-      ctx.fill();
+      const sprite = this.shardSprite(tier);
+      const half = sprite.half * k;
+      ctx.drawImage(sprite.canvas, it.x - half, y - half, half * 2, half * 2);
     } else if (it.kind === 'life') {
       this.glow(it.x, y, 20, '#3dffb0', 0.7);
       ctx.fillStyle = '#3dffb0';
       ctx.fillRect(it.x - 2, y - 7, 4, 14);
       ctx.fillRect(it.x - 7, y - 2, 14, 4);
-    } else if (it.kind === 'chest') {
-      this.glow(it.x, y, 38 + Math.sin(time * 5) * 5, '#ffd23c', 0.75);
-      ctx.strokeStyle = '#ffd23c';
+    } else if (it.kind === 'chest' || it.kind === 'legend') {
+      // A boss's legendary cache is the same box, bigger, orange and wrapped in a turning ring.
+      const legend = it.kind === 'legend';
+      const k = legend ? 1.5 : 1;
+      const color = legend ? '#ff8a1f' : '#ffd23c';
+      this.glow(it.x, y, (38 + Math.sin(time * 5) * 5) * (legend ? 2 : 1), color, 0.75);
+      ctx.strokeStyle = color;
       ctx.lineWidth = 2.5;
-      ctx.strokeRect(it.x - 10, y - 8, 20, 16);
-      ctx.strokeStyle = MAGENTA;
+      ctx.strokeRect(it.x - 10 * k, y - 8 * k, 20 * k, 16 * k);
+      ctx.strokeStyle = legend ? '#ffffff' : MAGENTA;
       ctx.beginPath();
-      ctx.moveTo(it.x - 10, y - 1);
-      ctx.lineTo(it.x + 10, y - 1);
+      ctx.moveTo(it.x - 10 * k, y - k);
+      ctx.lineTo(it.x + 10 * k, y - k);
       ctx.stroke();
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(it.x - 2, y - 3, 4, 5);
+      ctx.fillRect(it.x - 2 * k, y - 3 * k, 4 * k, 5 * k);
+      if (legend) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 7]);
+        ctx.lineDashOffset = -time * 30;
+        ctx.beginPath();
+        ctx.arc(it.x, y, 28, 0, TAU);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     } else {
       this.glow(it.x, y, 22, MAGENTA, 0.7);
       ctx.strokeStyle = MAGENTA;

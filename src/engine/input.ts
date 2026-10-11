@@ -10,6 +10,8 @@ export class Input {
   /** Joystick state in CSS pixels, for drawing. */
   stick = { active: false, ox: 0, oy: 0, x: 0, y: 0 };
   readonly stickRadius = 56;
+  /** The thumb may overshoot the ring this far before the ring starts following it. */
+  readonly stickSlack = 44;
 
   private keys = new Set<string>();
   private pointerId: number | null = null;
@@ -44,13 +46,14 @@ export class Input {
     const s = this.stick;
     s.x = e.clientX;
     s.y = e.clientY;
-    // Drag the origin along once the thumb leaves the ring, so reversing is instant.
+    // Past the slack the origin is dragged along, so the thumb never has to travel far to reverse.
     const dx = s.x - s.ox;
     const dy = s.y - s.oy;
     const d = Math.hypot(dx, dy);
-    if (d > this.stickRadius) {
-      s.ox = s.x - (dx / d) * this.stickRadius;
-      s.oy = s.y - (dy / d) * this.stickRadius;
+    const leash = this.stickRadius + this.stickSlack;
+    if (d > leash) {
+      s.ox = s.x - (dx / d) * leash;
+      s.oy = s.y - (dy / d) * leash;
     }
   };
 

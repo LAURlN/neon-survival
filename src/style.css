@@ -74,10 +74,11 @@ body {
 
 #xp-fill {
   height: 100%;
-  width: 0;
+  /* Scaled, not resized: a transform does not trigger layout. */
+  transform: scaleX(0);
+  transform-origin: left;
   background: linear-gradient(90deg, var(--magenta), var(--cyan));
-  box-shadow: 0 0 10px var(--cyan);
-  transition: width 0.12s linear;
+  transition: transform 0.12s linear;
 }
 
 #topbar {

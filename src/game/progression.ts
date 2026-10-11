@@ -5,6 +5,7 @@
  *
  *   level-up   -> basic circuit tiles, and sometimes a stat upgrade
  *   data cache -> special circuit tiles, and a piece of cyberware
+ *   boss cache -> legendary circuit tiles
  */
 import { VOCAB } from '../data/theme';
 import { CAT_LABEL, RARITY, TILE_LIST, type TileDef } from '../data/tiles';
@@ -100,6 +101,11 @@ export class Progression {
     const offers = tiles.map((t) => this.tileOffer(t));
     if (withUpgrade) offers.push(this.passiveOffer(draw(upgrades, 1, () => 1)[0]));
     return offers;
+  }
+
+  /** Choices for the cache a boss drops: legendary tiles only. */
+  legendaryOffers(): Offer[] {
+    return draw(TILE_LIST.filter((t) => t.rarity === 4), GAME.choices, (t) => t.weight ?? 1).map((t) => this.tileOffer(t));
   }
 
   /** Choices for a data cache: special tiles, plus one piece of cyberware. */

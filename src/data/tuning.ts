@@ -37,7 +37,7 @@ export const GAME = {
   enemyHpGrowth: [0.1, 0.012],
   enemyAtkGrowth: 0.03,
   /** Hard cap on live enemies, for performance. */
-  maxEnemies: 420,
+  maxEnemies: 380,
   /** Kill counts at which a treasure chest drops; after the list, every `chestEvery` kills. */
   chestKills: [40, 130, 280, 480, 720],
   chestEvery: 320,
@@ -46,6 +46,9 @@ export const GAME = {
   lifeOrbHeal: 20,
   /** Options shown on level up / chest. */
   choices: 3,
+  /** Damage numbers and hit sparks started per frame; both are costly to draw on phones. */
+  textPerFrame: 2,
+  sparksPerFrame: 5,
   /** Chance (%) that one of the level-up choices is a stat upgrade instead of a tile. */
   upgradeOfferChance: 45,
   /** A hostile within this distance counts as "close" for proximity gates. */
@@ -83,8 +86,34 @@ export const WAVES: Wave[] = [
   { from: 14, every: 0.6, batch: 13, ids: [26, 27, 28, 34, 18] },
 ];
 
-/** A boss appears every `every` minutes, cycling through `ids`. */
-export const BOSSES = { every: 5, ids: [41, 42, 43, 45, 46] };
+export type BossPattern = 'charger' | 'summoner' | 'pulsar' | 'hive';
+
+/**
+ * A boss appears every `every` minutes. Its body and stats cycle through `ids`
+ * (enemy ids from game-data.json), its behaviour through `patterns`. Every boss
+ * drops a legendary cache.
+ */
+export const BOSSES = {
+  every: 5,
+  ids: [41, 42, 43, 45, 46],
+  patterns: ['charger', 'summoner', 'pulsar', 'hive'] as BossPattern[],
+  names: { charger: 'JUGGERNAUT', summoner: 'BROODCALLER', pulsar: 'PULSAR', hive: 'HIVE CORE' } as Record<BossPattern, string>,
+  /** Charger: seconds between lunges, warning time, and launch speed. */
+  chargeEvery: 3.2,
+  chargeWindup: 0.8,
+  chargeSpeed: 2100,
+  /** Summoner: seconds between calls, and hostiles per call. */
+  summonEvery: 5,
+  summonCount: 6,
+  /** Pulsar: seconds between blasts, warning time, blast radius, damage as a multiple of its ATK. */
+  pulseEvery: 3.5,
+  pulseWindup: 1.1,
+  pulseRadius: 175,
+  pulseDamage: 1.5,
+  /** Hive: elites released when it dies. */
+  hiveElites: 3,
+  hiveEliteId: 29,
+};
 
 /** Artifact grade -> drop weight and card colour. */
 export const GRADES: Record<number, { name: string; weight: number; color: string }> = {

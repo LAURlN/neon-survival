@@ -74,8 +74,11 @@ async function drainChoices(g: Game) {
   running = false;
   input.reset();
   audio.setPaused(true);
-  while (g.pendingChests > 0 || g.pendingLevelUps > 0) {
-    if (g.pendingChests > 0) {
+  while (g.pendingLegendary > 0 || g.pendingChests > 0 || g.pendingLevelUps > 0) {
+    if (g.pendingLegendary > 0) {
+      g.pendingLegendary--;
+      await ui.choose(VOCAB.legendary, g.progression.legendaryOffers());
+    } else if (g.pendingChests > 0) {
       g.pendingChests--;
       await ui.choose(VOCAB.chest, g.progression.chestOffers());
     } else {
@@ -92,6 +95,7 @@ async function drainChoices(g: Game) {
 function frame(now: number) {
   // Clamp the step so a background tab or a long frame cannot tunnel things through each other.
   const dt = Math.min(0.05, (now - last) / 1000);
+  if (game && running) renderer.adapt(now - last);
   last = now;
 
   if (game) {
@@ -105,7 +109,7 @@ function frame(now: number) {
         audio.stopMusic();
         audio.play('over');
         ui.showResult(game, start);
-      } else if (game.pendingChests > 0 || game.pendingLevelUps > 0) {
+      } else if (game.pendingLegendary > 0 || game.pendingChests > 0 || game.pendingLevelUps > 0) {
         void drainChoices(game);
       }
     }
