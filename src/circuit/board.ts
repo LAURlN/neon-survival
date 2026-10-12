@@ -59,7 +59,22 @@ export interface TileSpot {
   rot: number;
 }
 
-export const cellKey = (x: number, y: number) => `${x},${y}`;
+/** A spark with its `seen` map flattened, so it survives JSON. */
+type PackedSpark = Omit<Spark, 'seen'> & { seen: [string, number][] };
+
+/** The running state of a board: see `Board.freeze`. */
+export interface BoardState {
+  tick: number;
+  acc: number;
+  sparks: PackedSpark[];
+  /** Per tile: [key, charge, pending, ready, held sparks, storeT, toggle]. Idle tiles are left out. */
+  tiles: [string, number, number, number, PackedSpark[], number, number][];
+}
+
+const packSpark = (s: Spark): PackedSpark => ({ ...s, seen: [...s.seen] });
+const unpackSpark = (s: PackedSpark): Spark => ({ ...s, seen: new Map(s.seen) });
+
+export const cellKey =(x: number, y: number) => `${x},${y}`;
 
 export class Board {
   readonly tiles = new Map<string, Tile>();
@@ -151,6 +166,27 @@ export class Board {
     for (const t of tiles) if (TILES[t.id]) this.set(t.x, t.y, t.id, t.rot);
     for (const [id, n] of inventory) if (TILES[id]) this.inventory.set(id, n);
     this.changed();
+  }
+
+  /** Everything in motion as plain data: the clock, the sparks and what each tile is holding. */
+  freeze(): BoardState {
+    const tiles: BoardState['tiles'] = [];
+    for (const t of this.tiles.values()) {
+      if (!t.charge && !t.pending && !t.store.length && !t.toggle && t.ready <= this.tick) continue;
+      tiles.push([t.key, t.charge, t.pending, t.ready, t.store.map(packSpark), t.storeT, t.toggle ? 1 : 0]);
+    }
+    return { tick: this.tick, acc: this.acc, sparks: this.sparks.map(packSpark), tiles };
+  }
+
+  /** Put back what `freeze` recorded, onto a layout that has already been restored. */
+  thaw(st: BoardState) {
+    this.tick = st.tick;
+    this.acc = st.acc;
+    this.sparks = st.sparks.map(unpackSpark);
+    for (const [key, charge, pending, ready, store, storeT, toggle] of st.tiles) {
+      const t = this.tiles.get(key);
+      if (t) Object.assign(t, { charge, pending, ready, store: store.map(unpackSpark), storeT, toggle: !!toggle });
+    }
   }
 
   /** Every placed tile as plain data (for clipboards and saved loadouts). */

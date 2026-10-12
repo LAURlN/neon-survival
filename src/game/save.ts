@@ -4,9 +4,11 @@
  * A save holds everything the player has earned - time, level, the circuit,
  * the tray, upgrades, cyberware - plus where the player, every hostile and
  * every pickup is, so reloading the page cannot be used to escape a bad spot.
- * Only shots in flight and lingering zones are not stored.
+ * The circuit resumes mid-flow too: its sparks and whatever the tiles hold are
+ * kept, so the weapons fire again at once. Only shots already in the air and
+ * lingering zones are not stored.
  */
-import type { TileSpot } from '../circuit/board';
+import type { BoardState, TileSpot } from '../circuit/board';
 import type { BossState } from './boss';
 import type { EnemyKind, PickupKind } from './types';
 import { DIFFICULTIES } from '../data/tuning';
@@ -43,6 +45,8 @@ export interface SaveData {
   pending: [number, number, number];
   tiles: TileSpot[];
   inventory: [string, number][];
+  /** Sparks on the board and what the tiles are holding. Missing in older saves. */
+  circuit?: BoardState;
   passives: [number, number][];
   artifacts: number[];
   bossesSpawned: number;
@@ -63,6 +67,7 @@ export function snapshot(g: Game): SaveData {
     pickups: g.pickups.filter((p) => !p.dead).map((p) => [p.kind, round(p.x), round(p.y), round(p.value)]),
     pending: [g.pendingLevelUps, g.pendingChests, g.pendingLegendary],
     tiles: g.board.layout(), inventory: [...g.board.inventory].filter(([, n]) => n > 0),
+    circuit: g.board.freeze(),
     passives: [...g.progression.passives], artifacts: g.progression.artifacts.map((a) => a.id),
     bossesSpawned: g.director.bossesSpawned, chestIndex: g.chestIndex, nextChestAt: g.nextChestAt,
     damage: [...g.damageBy],
@@ -96,6 +101,7 @@ export function restore(input: Input, d: SaveData): Game {
     }
   }
   g.board.restore(d.tiles, d.inventory);
+  if (d.circuit) g.board.thaw(d.circuit);
 
   // Stats are rebuilt by applying the effects again - straight to the sheet, so
   // one-off side effects (like "gain a level") do not happen a second time.
